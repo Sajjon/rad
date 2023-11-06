@@ -1,9 +1,9 @@
 use clap::{Parser, Subcommand};
-use rusty_vanity::file_reader::suffixes_from_file;
-use rusty_vanity::find::{find_all, find_n};
-use rusty_vanity::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
-use rusty_vanity::params::{Bip39WordCount, BruteForceInput};
-use rusty_vanity::run_config::RunConfig;
+use rad::file_reader::suffixes_from_file;
+use rad::find::{find_all, find_n};
+use rad::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
+use rad::params::{Bip39WordCount, BruteForceInput};
+use rad::run_config::RunConfig;
 
 #[derive(Parser)]
 #[command(name = "rad", version)]

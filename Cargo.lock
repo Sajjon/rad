@@ -790,6 +790,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "rad"
+version = "0.1.0"
+dependencies = [
+ "ansi-escapes",
+ "base64",
+ "bip32",
+ "bip39",
+ "clap",
+ "const_format",
+ "default-args",
+ "hex",
+ "itertools 0.11.0",
+ "k256",
+ "nu-ansi-term",
+ "primitive-types",
+ "qrencode",
+ "radix-engine-common",
+ "rand 0.7.3",
+ "scrypto",
+ "thiserror",
+ "unindent",
+]
+
+[[package]]
 name = "radium"
 version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -987,30 +1011,6 @@ name = "rustversion"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7ffc183a10b4478d04cbbbfc96d0873219d962dd5accaff2ffbd4ceb7df837f4"
-
-[[package]]
-name = "rusty_vanity"
-version = "0.1.0"
-dependencies = [
- "ansi-escapes",
- "base64",
- "bip32",
- "bip39",
- "clap",
- "const_format",
- "default-args",
- "hex",
- "itertools 0.11.0",
- "k256",
- "nu-ansi-term",
- "primitive-types",
- "qrencode",
- "radix-engine-common",
- "rand 0.7.3",
- "scrypto",
- "thiserror",
- "unindent",
-]
 
 [[package]]
 name = "ryu"
