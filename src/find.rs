@@ -71,6 +71,7 @@ where
                     let result = Vanity {
                         target: target.clone(),
                         address: address.clone(),
+                        address_suffix: suffix.to_string(),
                         derivation_path: format!("{}/{}'", intermediary_path_, index).to_string(),
                         index: index,
                         mnemonic: mnemonic_phrase.clone(),

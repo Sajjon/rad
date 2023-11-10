@@ -1,10 +1,10 @@
 use crate::error::TargetSuffixError;
 use primitive_types::{U128, U256};
 use rand::Rng;
-use std::collections::{BTreeSet, HashSet};
+use std::collections::BTreeSet;
 use unindent::unindent;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Bip39WordCount {
     Twelve,
     #[allow(dead_code)]
@@ -26,7 +26,7 @@ impl Bip39WordCount {
 }
 
 /// Parameters use to control how and which vanity accounts are found.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BruteForceInput {
     /// The target suffixes to search for, must be validated before set.
     pub targets: BTreeSet<String>,

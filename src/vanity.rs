@@ -5,10 +5,12 @@ use nu_ansi_term::{
 use base64::{engine::general_purpose, Engine as _};
 use qrencode::{render::unicode, QrCode};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Vanity {
     pub target: String,
     pub address: String,
+    /// Last 6 chars of the address, stored property for higher performance, used to check match against `target`.
+    pub address_suffix: String,
     pub derivation_path: String,
     pub index: u32,
     pub public_key_bytes: Vec<u8>,
