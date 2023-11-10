@@ -1,70 +1,11 @@
-use rusty_vanity::{
+use rad::{
     error::TargetSuffixError,
-    find::{find, find_n},
+    input, input_deterministic,
     params::{Bip39WordCount, BruteForceInput, MAX_INDEX},
     run_config::RunConfig,
+    test_utils::{_find_n, _find_one},
     vanity::Vanity,
 };
-extern crate default_args;
-use default_args::default_args;
-// use test::Bencher;
-
-default_args! {
-    fn input(
-        targets: &str,
-        max_index: u32 = MAX_INDEX,
-        find_multiple_accounts_per_target: bool = false,
-        mnemonic_word_count: Bip39WordCount = Bip39WordCount::Twelve,
-        brute_force_seed: Option<&'static [u8]> = Option::None,
-    ) -> Result<BruteForceInput, TargetSuffixError> {
-        BruteForceInput::new_splitting_targets(
-            targets,
-            max_index,
-            find_multiple_accounts_per_target,
-            mnemonic_word_count,
-            brute_force_seed
-        )
-    }
-}
-
-default_args! {
-    fn input_deterministic(
-        targets: &str,
-        max_index: u32 = MAX_INDEX,
-        find_multiple_accounts_per_target: bool = false,
-        mnemonic_word_count: Bip39WordCount = Bip39WordCount::Twelve,
-        brute_force_seed: &'static [u8] = b"rusty vanity",
-    ) -> BruteForceInput {
-        input!(
-            targets,
-            max_index,
-            find_multiple_accounts_per_target,
-            mnemonic_word_count,
-            Option::Some(brute_force_seed)
-        ).unwrap()
-    }
-}
-
-fn _find<F>(input: BruteForceInput, on_result: F) -> ()
-where
-    F: FnMut(Vanity) -> bool,
-{
-    find(input, RunConfig::new(0), on_result)
-}
-
-fn _find_one(input: BruteForceInput) -> Vanity {
-    let mut result: Option<Vanity> = Option::None;
-    _find(input, |v| {
-        result = Option::Some(v);
-        return false;
-    });
-
-    return result.expect("one result");
-}
-
-pub fn _find_n(n: usize, input: BruteForceInput) -> Vec<Vanity> {
-    find_n(n, input, RunConfig::new(0))
-}
 
 #[test]
 fn empty_targets_str() {
@@ -143,6 +84,24 @@ fn invalid_chars() {
             'b'
         ))
     );
+}
+
+#[test]
+fn x() {
+    let result = _find_one(input_deterministic!("x"));
+    assert_eq!(result.index, 121u32);
+}
+
+#[test]
+fn xyz() {
+    let result = _find_one(input_deterministic!("xyz"));
+    assert_eq!(result.index, 178012);
+}
+
+#[test]
+fn target_2345() {
+    let result = _find_one(input_deterministic!("2345"));
+    assert_eq!(result.index, 597472);
 }
 
 #[test]
@@ -228,6 +187,14 @@ fn n_3_find_single_accounts_per_target() {
 
 #[test]
 fn xrd() {
+    assert_eq!(
+        _find_one(input_deterministic!("xrd")).address,
+        "account_rdx16xl72qyxvhkjtmyxeazl4tcgjh5n3hse6xfnr3ku0utlk9myp47xrd"
+    );
+}
+
+#[test]
+fn speed() {
     assert_eq!(
         _find_one(input_deterministic!("xrd")).address,
         "account_rdx16xl72qyxvhkjtmyxeazl4tcgjh5n3hse6xfnr3ku0utlk9myp47xrd"

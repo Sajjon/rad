@@ -80,7 +80,7 @@ fn main() {
     )
     .expect("Valid input");
 
-    let run_config = RunConfig::new(cli.print_pulse);
+    let run_config = RunConfig::new(true, cli.print_pulse);
     let matches_per_mnemonic = cli.matches_per_mnemonic;
     println!("{}", INFO_WITH_DONATION_QR);
     match matches_per_mnemonic {

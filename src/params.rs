@@ -1,7 +1,7 @@
 use crate::error::TargetSuffixError;
 use primitive_types::{U128, U256};
 use rand::Rng;
-use std::collections::HashSet;
+use std::collections::{BTreeSet, HashSet};
 use unindent::unindent;
 
 #[derive(Debug, PartialEq)]
@@ -29,7 +29,7 @@ impl Bip39WordCount {
 #[derive(Debug, PartialEq)]
 pub struct BruteForceInput {
     /// The target suffixes to search for, must be validated before set.
-    pub targets: HashSet<String>,
+    pub targets: BTreeSet<String>,
 
     /// Set to `true` if you wanna search for many accounts for the same
     /// target. If `false` we will remove the target once we find a vanity
@@ -117,7 +117,7 @@ fn invalid_bech32_char(c: &char) -> bool {
     BECH32_ALPHABET.contains(*c)
 }
 
-pub fn validating_split(comma_seperated: &str) -> Result<HashSet<String>, TargetSuffixError> {
+pub fn validating_split(comma_seperated: &str) -> Result<BTreeSet<String>, TargetSuffixError> {
     if comma_seperated.len() == 0 {
         return Err(TargetSuffixError::TargetsStringMustNotBeEmpty);
     }
@@ -128,7 +128,7 @@ pub fn validating_split(comma_seperated: &str) -> Result<HashSet<String>, Target
         .map(str::to_string)
         .collect();
 
-    let mut set: HashSet<String> = HashSet::new();
+    let mut set: BTreeSet<String> = BTreeSet::new();
 
     for target in &targets {
         if target.len() == 0 {

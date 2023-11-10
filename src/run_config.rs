@@ -4,13 +4,15 @@ use primitive_types::U256;
 /// relating to which vanity accounts are found, just how
 /// program executes.
 pub struct RunConfig {
+    pub print_found_vanity_result: bool,
     /// `0` means don't print anything
     pub print_pulse: U256,
 }
 
 impl RunConfig {
-    pub fn new(print_pulse: u32) -> Self {
+    pub fn new(print_found_vanity_result: bool, print_pulse: u32) -> Self {
         Self {
+            print_found_vanity_result,
             print_pulse: U256::from(print_pulse),
         }
     }

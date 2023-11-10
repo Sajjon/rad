@@ -5,6 +5,7 @@ use nu_ansi_term::{
 use base64::{engine::general_purpose, Engine as _};
 use qrencode::{render::unicode, QrCode};
 
+#[derive(Debug)]
 pub struct Vanity {
     pub target: String,
     pub address: String,

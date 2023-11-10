@@ -22,7 +22,9 @@ where
     let mut int = input.int();
 
     let mut attempts_since_last_find = U256::zero();
-    println!("{}", input);
+    if run_config.print_found_vanity_result {
+        println!("{}", input);
+    }
     let mut done = false;
     while !done {
         let mnemonic = mnemonic_from_u256(&int, &input.mnemonic_word_count);
@@ -34,7 +36,7 @@ where
         let intermediary_path = intermediary_path_.parse().expect("intermediary path");
         let intermediary_xprv = XPrv::derive_from_path(&seed, &intermediary_path).expect("hd key");
 
-        if input.index_end() > 100000 {
+        if input.index_end() > 100000 && run_config.print_found_vanity_result {
             // don't wanna print to often
             println!("🔮 Trying mnemonic: {}\n", mnemonic_phrase);
         }
@@ -76,13 +78,16 @@ where
                         bip39_seed_fingerprint: seed_fingerprint.clone(),
                     };
                     attempts_since_last_find = U256::zero();
-                    println!(
-                        "{}\n{}{}\n{}",
-                        "🎯".repeat(40),
-                        result.to_string(),
-                        INFO_DONATION_ADDR_ONLY.to_string(),
-                        "🎯".repeat(40),
-                    );
+
+                    if run_config.print_found_vanity_result {
+                        println!(
+                            "{}\n{}{}\n{}",
+                            "🎯".repeat(40),
+                            result.to_string(),
+                            INFO_DONATION_ADDR_ONLY.to_string(),
+                            "🎯".repeat(40),
+                        );
+                    }
                     if !on_result(result) {
                         done = true;
                     }
