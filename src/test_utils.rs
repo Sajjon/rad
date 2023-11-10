@@ -53,7 +53,7 @@ pub fn _find<F>(input: BruteForceInput, on_result: F) -> ()
 where
     F: FnMut(Vanity) -> bool,
 {
-    find(input, RunConfig::new(false, 0), on_result)
+    find(input, RunConfig::new(false, 0, false, false), on_result)
 }
 
 pub fn _find_one(input: BruteForceInput) -> Vanity {
@@ -67,7 +67,7 @@ pub fn _find_one(input: BruteForceInput) -> Vanity {
 }
 
 pub fn _find_n(n: usize, input: BruteForceInput) -> Vec<Vanity> {
-    find_n(n, input, RunConfig::new(false, 0))
+    find_n(n, input, RunConfig::new(false, 0, false, false))
 }
 
 pub fn blocking_find_timeout_after(
@@ -77,7 +77,7 @@ pub fn blocking_find_timeout_after(
 ) -> Vec<Vanity> {
     block_on(future::timeout(
         duration,
-        par_find(take, input, RunConfig::new(false, 0)),
+        par_find(take, input, RunConfig::new(false, 0, false, false)),
     ))
     .expect("Should have found elements within timeout")
 }

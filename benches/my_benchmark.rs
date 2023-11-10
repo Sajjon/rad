@@ -3,7 +3,7 @@ use std::time::Duration;
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use rad::{
     find_par::par_find,
-    input_deterministic,
+    input,
     params::{Bip39WordCount, MAX_INDEX},
     run_config::RunConfig,
     test_utils::_find_one,
@@ -12,14 +12,17 @@ use rad::{
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("benchmarking");
     group
-        .sample_size(10)
+        .sample_size(1000)
         .measurement_time(Duration::from_secs(200)); // target "xyz" takes ~150 sec on Macbook Pro M2
     group.bench_function("benchy", |b| {
         b.iter(|| {
             black_box(
-                // Fast targets: "d" (1.2), "t" (1.5), "u" (1.3), "z" (1.4)
-                // _find_one(input_deterministic!("xyz")),
-                par_find(1, input_deterministic!("xyz"), RunConfig::new(false, 0)),
+                // _find_one(input!("xyz").unwrap()),
+                par_find(
+                    1,
+                    input!("xyz").unwrap(),
+                    RunConfig::new(false, 0, false, false),
+                ),
             )
         })
     });
