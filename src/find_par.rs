@@ -2,7 +2,7 @@ use crate::params::{Bip39WordCount, BruteForceInput, MAX_SUFFIX_LENGTH};
 use crate::run_config::RunConfig;
 use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::fmt;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
@@ -82,7 +82,7 @@ impl fmt::Debug for MyError {
 }
 
 fn __find<F, G, H, T, R>(
-    draining: BTreeSet<T>,
+    draining: HashSet<T>,
     print_mnemonic: bool,
     print_result: bool,
     print_pulse: U256,
@@ -99,84 +99,85 @@ where
     T: std::fmt::Debug + Ord + Clone + Send + Sync + 'static,
     R: std::fmt::Debug + std::fmt::Display + Send + 'static,
 {
-    let (tx, rx) = channel(1000);
+    // let (tx, rx) = channel(1000);
 
-    thread::spawn(move || {
-        let to_drain_mutex = Arc::new(Mutex::new(draining));
-        let attempts_since_last_find = Arc::new(Mutex::new(U256::zero()));
-        outer.try_for_each(|o| {
-            let mnemonic = mnemonic_from_u256(&o, &Bip39WordCount::Twelve);
-            let mnemonic_phrase = mnemonic.to_string(); // bip39 crate (since it support 12 word mnemonics)
-            if print_mnemonic {
-                println!("🔮 mnemonic: {}", mnemonic_phrase);
-            }
-            let seed_ = mnemonic.to_seed(""); // bip39 crate (since it support 12 word mnemonics)
-            let seed = Seed::new(seed_); // bip32 create
-            let seed_fingerprint = general_purpose::STANDARD_NO_PAD.encode(&seed_[56..]);
-            let intermediary_path_ = "m/44'/1022'/0'/0";
-            let intermediary_path = intermediary_path_.parse().expect("intermediary path");
-            let intermediary_xprv =
-                XPrv::derive_from_path(&seed, &intermediary_path).expect("hd key");
+    todo!()
+    // thread::spawn(move || {
+    //     let to_drain_mutex = Arc::new(Mutex::new(draining));
+    //     let attempts_since_last_find = Arc::new(Mutex::new(U256::zero()));
+    //     outer.try_for_each(|o| {
+    //         let mnemonic = mnemonic_from_u256(&o, &Bip39WordCount::Twelve);
+    //         let mnemonic_phrase = mnemonic.to_string(); // bip39 crate (since it support 12 word mnemonics)
+    //         if print_mnemonic {
+    //             println!("🔮 mnemonic: {}", mnemonic_phrase);
+    //         }
+    //         let seed_ = mnemonic.to_seed(""); // bip39 crate (since it support 12 word mnemonics)
+    //         let seed = Seed::new(seed_); // bip32 create
+    //         let seed_fingerprint = general_purpose::STANDARD_NO_PAD.encode(&seed_[56..]);
+    //         let intermediary_path_ = "m/44'/1022'/0'/0";
+    //         let intermediary_path = intermediary_path_.parse().expect("intermediary path");
+    //         let intermediary_xprv =
+    //             XPrv::derive_from_path(&seed, &intermediary_path).expect("hd key");
 
-            inner
-                .clone()
-                .flat_map(|i| {
-                    let mut attempts = attempts_since_last_find.lock().unwrap();
-                    attempts.add_assign(U256::one());
+    //         inner
+    //             .clone()
+    //             .flat_map(|i| {
+    //                 let mut attempts = attempts_since_last_find.lock().unwrap();
+    //                 attempts.add_assign(U256::one());
 
-                    if !print_pulse.is_zero() {
-                        if attempts.clone() % print_pulse == U256::zero() {
-                            print!("{}", EraseLines(2));
-                            println!("⏳ Attempts since last find: {}", attempts);
-                        }
-                    }
-                    let ni = NeedleInput::new(
-                        o.clone(),
-                        i.clone(),
-                        intermediary_xprv.clone(),
-                        mnemonic_phrase.clone(),
-                        seed_fingerprint.clone(),
-                    );
-                    let candidates: Vec<R> = to_drain_mutex
-                        .clone()
-                        .lock()
-                        .unwrap()
-                        .clone()
-                        .into_iter()
-                        .filter_map(|target| {
-                            let c = make_candidate(&ni, target.clone());
-                            if eval_candidate(&c, target.clone()) {
-                                *attempts = U256::zero();
-                                if print_result {
-                                    println!("{}", c);
-                                }
-                                Some(c)
-                            } else {
-                                None
-                            }
-                        })
-                        .collect();
-                    return candidates;
-                })
-                .try_for_each_with(tx.clone(), |s, x| {
-                    let d = drain_with_candidate(&x);
-                    return s.try_send(x).map_err(|_| MyError).and_then(|_| {
-                        let mut to_drain = to_drain_mutex.lock().unwrap();
-                        to_drain.remove(&d);
-                        if to_drain.is_empty() {
-                            Err(MyError)
-                        } else {
-                            Ok(())
-                        }
-                    });
-                })
-        })
-    });
-    return rx;
+    //                 if !print_pulse.is_zero() {
+    //                     if attempts.clone() % print_pulse == U256::zero() {
+    //                         print!("{}", EraseLines(2));
+    //                         println!("⏳ Attempts since last find: {}", attempts);
+    //                     }
+    //                 }
+    //                 let ni = NeedleInput::new(
+    //                     o.clone(),
+    //                     i.clone(),
+    //                     intermediary_xprv.clone(),
+    //                     mnemonic_phrase.clone(),
+    //                     seed_fingerprint.clone(),
+    //                 );
+    //                 let candidates: Vec<R> = to_drain_mutex
+    //                     .clone()
+    //                     .lock()
+    //                     .unwrap()
+    //                     .clone()
+    //                     .into_iter()
+    //                     .filter_map(|target| {
+    //                         let c = make_candidate(&ni, target.clone());
+    //                         if eval_candidate(&c, target.clone()) {
+    //                             *attempts = U256::zero();
+    //                             if print_result {
+    //                                 println!("{}", c);
+    //                             }
+    //                             Some(c)
+    //                         } else {
+    //                             None
+    //                         }
+    //                     })
+    //                     .collect();
+    //                 return candidates;
+    //             })
+    //             .try_for_each_with(tx.clone(), |s, x| {
+    //                 let d = drain_with_candidate(&x);
+    //                 return s.try_send(x).map_err(|_| MyError).and_then(|_| {
+    //                     let mut to_drain = to_drain_mutex.lock().unwrap();
+    //                     to_drain.remove(&d);
+    //                     if to_drain.is_empty() {
+    //                         Err(MyError)
+    //                     } else {
+    //                         Ok(())
+    //                     }
+    //                 });
+    //             })
+    //     })
+    // });
+    // return rx;
 }
 
 fn _find(
-    draining: BTreeSet<String>,
+    draining: HashSet<String>,
     outer_start: U256,
     inner: Range<u32>,
     print_mnemonic: bool,

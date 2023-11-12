@@ -1,8 +1,9 @@
-use crate::params::{Bip39WordCount, BruteForceInput, MAX_SUFFIX_LENGTH};
+use crate::params::{validating_split, Bip39WordCount, BruteForceInput, MAX_SUFFIX_LENGTH};
 use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
-use std::collections::BTreeSet;
 use std::ops::Range;
+use std::process::exit;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::SystemTime;
 
@@ -15,11 +16,12 @@ use bip32::{DerivationPath, Seed, XPrv};
 use bip39::Mnemonic;
 use primitive_types::U256;
 use radix_engine_common::prelude::{
-    AddressBech32Encoder, ComponentAddress, NetworkDefinition, Secp256k1PublicKey,
+    AddressBech32Encoder, ComponentAddress, HashSet, NetworkDefinition, Secp256k1PublicKey,
 };
 
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
+use rayon::range::Iter;
 use thiserror::Error;
 #[derive(Debug, Error, PartialEq)]
 pub enum RunError {
@@ -166,25 +168,6 @@ impl HDWallet {
     }
 }
 
-pub fn find_par_in_range<F>(range: Range<u32>, wallet: Box<HDWallet>, map_op: F) -> Receiver<Vanity>
-where
-    F: Fn(ChildKey) -> Result<Option<Vanity>, ()> + Send + Sync + 'static,
-{
-    let (sender, receiver) = channel(1000);
-    thread::spawn(move || {
-        range
-            .into_par_iter()
-            .map(|i| wallet.derive_child(i))
-            .flat_map(map_op)
-            .try_for_each_with(sender, |s, x| match x {
-                Some(v) => s.try_send(v),
-                None => Ok(()),
-            })
-            .expect("No send error");
-    });
-    return receiver;
-}
-
 fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -> Vanity {
     Vanity {
         target: target.to_string(),
@@ -197,47 +180,76 @@ fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -
         bip39_seed_fingerprint: wallet.fingerprint(),
     }
 }
-pub fn find_par_with_wallet(
+pub fn find_par_with_wallet<F>(
     wallet: Box<HDWallet>,
     end_index: u32,
-    targets: BTreeSet<String>,
-) -> Receiver<Vanity> {
+    targets: HashSet<String>,
+    on_vanity: F,
+) -> Vec<Vanity>
+where
+    F: Fn(&Vanity) -> Result<(), ()> + Send + Sync,
+{
     let now = SystemTime::now();
-    let receiver = find_par_in_range(0..end_index, wallet.clone(), move |c| {
-        if targets.is_empty() {
-            return Err(());
-        }
-        let suff = c.address_suffix().unwrap();
-        let mut vanity: Option<Vanity> = Option::None;
-        for target in targets.iter() {
-            if suff.ends_with(target.as_str()) {
-                vanity = Some(vanity_from_childkey(&c, target, &wallet))
-            } else {
-                continue;
+
+    let vector = (0..end_index)
+        .into_par_iter()
+        .map(|i| wallet.derive_child(i))
+        .flat_map(|c| {
+            let suff = c.address_suffix().unwrap();
+            for target in targets.iter() {
+                if suff.ends_with(target) {
+                    let vanity = vanity_from_childkey(&c, target, &wallet);
+                    return match on_vanity(&vanity) {
+                        Ok(_) => Ok(Some(vanity)),
+                        Err(_) => Err(()),
+                    };
+                } else {
+                    continue;
+                }
             }
-        }
-        return Ok(vanity);
-    });
+            return Ok(None);
+        })
+        .flat_map(|x| x)
+        .collect();
     let time_elapsed = now.elapsed().unwrap();
     let end_index_f32 = end_index as f32;
     let speed = end_index_f32 / time_elapsed.as_secs_f32();
     println!(
-        "✅ Exiting program, ran for '{}' sec, speed: '#{}' iters per second.",
-        time_elapsed.as_secs(),
+        "✅ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
+        time_elapsed.as_millis(),
         speed
     );
-    return receiver;
+    return vector;
 }
 
-pub fn find_par_improved(input: BruteForceInput) -> Receiver<Vanity> {
+pub fn find_par_with_wallet_until_find_all(
+    wallet: Box<HDWallet>,
+    end_index: u32,
+    targets_csv: &str,
+) -> Vec<Vanity> {
+    let targets_ = validating_split(targets_csv).unwrap();
+    let targets = Arc::new(Mutex::new(targets_.clone()));
+    find_par_with_wallet(wallet, end_index, targets_.clone(), |v| {
+        if targets.lock().unwrap().is_empty() {
+            return Err(());
+        } else {
+            targets.lock().unwrap().remove(&v.target);
+            return Ok(());
+        }
+    })
+}
+
+pub fn find_par_improved(input: BruteForceInput) -> Vec<Vanity> {
     let wallet = HDWallet::from_entropy(input.int()).unwrap();
-    let targets = input.targets.clone();
-    find_par_with_wallet(Box::new(wallet), input.index_end(), targets)
+    find_par_with_wallet(Box::new(wallet), input.index_end(), input.targets, |_| {
+        Ok(())
+    })
 }
 
 #[cfg(test)]
 mod tests {
-    use futures::executor::block_on;
+
+    use crate::params::validating_split;
 
     use super::*;
     #[test]
@@ -292,19 +304,19 @@ mod tests {
         )
         .unwrap();
 
-        let vanities: Vec<Vanity> = block_on(
-            find_par_with_wallet(
-                Box::new(wallet),
-                1000000u32,
-                BTreeSet::from(["9".to_string()]),
-            )
-            .take(1)
-            .collect::<Vec<Vanity>>(),
+        // find_par_with_wallet_until_find_all(
+        //     Box::new(wallet),
+        //     5000u32,
+        //     validating_split("xx,yy").unwrap(),
+        // );
+        let vanities = find_par_with_wallet_until_find_all(Box::new(wallet), 5000u32, "xx,yy");
+        assert_eq!(
+            vanities
+                .into_iter()
+                .map(|v| v.target)
+                .collect::<HashSet<String>>(),
+            HashSet::from(["xx", "yy"].map(|x| x.to_string()))
         );
-        let vanity = vanities[0].clone();
-        println!("✨ {}", vanity);
-
-        assert_eq!(vanity.target, "9");
 
         /*
          fn one() {

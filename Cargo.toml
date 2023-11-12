@@ -34,6 +34,7 @@ criterion = "0.5.1"
 
 [[bin]]
 name = "rad"
+test = false
 
 [[bench]]
 name = "my_benchmark"
