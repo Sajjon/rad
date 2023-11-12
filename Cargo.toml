@@ -43,6 +43,7 @@ harness = false
 opt-level = 3
 debug = true
 debug-assertions = false
+panic = "abort"
 overflow-checks = false
 lto = false
 incremental = false
