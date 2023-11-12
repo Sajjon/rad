@@ -10,6 +10,7 @@ use rad::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
 use rad::params::{Bip39WordCount, BruteForceInput};
 use rad::run_config::RunConfig;
 use rad::vanity::Vanity;
+use std::time::{Duration, SystemTime};
 
 #[derive(Parser)]
 #[command(name = "rad", version)]
@@ -122,7 +123,7 @@ async fn main() {
     let run_config = RunConfig::new(true, cli.print_pulse, true, true);
     let matches_per_mnemonic = cli.matches_per_mnemonic;
     println!("{}", INFO_WITH_DONATION_QR);
-
+    let now = SystemTime::now();
     if cli.slow {
         println!("‼️ you have disabled parallelisation, this makes the program much much much much slower. Please consider enabling parallelisation");
         not_par(input, run_config, matches_per_mnemonic);
@@ -130,4 +131,6 @@ async fn main() {
         println!("🚀 Running in parallell for maximum speed");
         parallell(input, run_config, matches_per_mnemonic).await;
     }
+    let elapsed = now.elapsed().unwrap();
+    println!("✅ Exiting program, ran for '{} sec'", elapsed.as_secs());
 }
