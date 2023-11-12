@@ -180,6 +180,19 @@ fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -
         bip39_seed_fingerprint: wallet.fingerprint(),
     }
 }
+
+fn do_find_par<F>(range: Range<u32>, wallet: Box<HDWallet>, on_childkey: F) -> Vec<Vanity>
+where
+    F: Fn(ChildKey) -> Result<Option<Vanity>, ()> + Send + Sync,
+{
+    range
+        .into_par_iter()
+        .map(|i| wallet.derive_child(i))
+        .flat_map(|c| on_childkey(c))
+        .flat_map(|x| x)
+        .collect()
+}
+
 pub fn find_par_with_wallet<F>(
     wallet: Box<HDWallet>,
     end_index: u32,
@@ -189,28 +202,40 @@ pub fn find_par_with_wallet<F>(
 where
     F: Fn(&Vanity) -> Result<(), ()> + Send + Sync,
 {
-    let now = SystemTime::now();
-
-    let vector = (0..end_index)
-        .into_par_iter()
-        .map(|i| wallet.derive_child(i))
-        .flat_map(|c| {
-            let suff = c.address_suffix().unwrap();
-            for target in targets.iter() {
-                if suff.ends_with(target) {
-                    let vanity = vanity_from_childkey(&c, target, &wallet);
-                    return match on_vanity(&vanity) {
-                        Ok(_) => Ok(Some(vanity)),
-                        Err(_) => Err(()),
-                    };
-                } else {
-                    continue;
-                }
+    do_find_par(0..end_index, wallet.clone(), |c| {
+        let suff = c.address_suffix().unwrap();
+        for target in targets.iter() {
+            if suff.ends_with(target) {
+                let vanity = vanity_from_childkey(&c, target, &wallet);
+                return match on_vanity(&vanity) {
+                    Ok(_) => Ok(Some(vanity)),
+                    Err(_) => Err(()),
+                };
+            } else {
+                continue;
             }
-            return Ok(None);
-        })
-        .flat_map(|x| x)
-        .collect();
+        }
+        return Ok(None);
+    })
+}
+
+pub fn find_par_with_wallet_until_find_all(
+    wallet: Box<HDWallet>,
+    end_index: u32,
+    targets_csv: &str,
+) -> Vec<Vanity> {
+    let now = SystemTime::now();
+    let targets_ = validating_split(targets_csv).unwrap();
+    let targets = Arc::new(Mutex::new(targets_.clone()));
+    let vector = find_par_with_wallet(wallet, end_index, targets_.clone(), |v| {
+        if targets.lock().unwrap().is_empty() {
+            return Err(());
+        } else {
+            targets.lock().unwrap().remove(&v.target);
+            return Ok(());
+        }
+    });
+
     let time_elapsed = now.elapsed().unwrap();
     let end_index_f32 = end_index as f32;
     let speed = end_index_f32 / time_elapsed.as_secs_f32();
@@ -222,23 +247,6 @@ where
     return vector;
 }
 
-pub fn find_par_with_wallet_until_find_all(
-    wallet: Box<HDWallet>,
-    end_index: u32,
-    targets_csv: &str,
-) -> Vec<Vanity> {
-    let targets_ = validating_split(targets_csv).unwrap();
-    let targets = Arc::new(Mutex::new(targets_.clone()));
-    find_par_with_wallet(wallet, end_index, targets_.clone(), |v| {
-        if targets.lock().unwrap().is_empty() {
-            return Err(());
-        } else {
-            targets.lock().unwrap().remove(&v.target);
-            return Ok(());
-        }
-    })
-}
-
 pub fn find_par_improved(input: BruteForceInput) -> Vec<Vanity> {
     let wallet = HDWallet::from_entropy(input.int()).unwrap();
     find_par_with_wallet(Box::new(wallet), input.index_end(), input.targets, |_| {
@@ -248,9 +256,6 @@ pub fn find_par_improved(input: BruteForceInput) -> Vec<Vanity> {
 
 #[cfg(test)]
 mod tests {
-
-    use crate::params::validating_split;
-
     use super::*;
     #[test]
     fn entropy() {
@@ -298,18 +303,14 @@ mod tests {
     }
 
     #[test]
-    fn find_vanity_suffix_9() {
+    fn find_vanity_suffix_xx_yy() {
         let wallet = HDWallet::from_mnemonic_phrase(
             "abandon abandon abandon top fire riot tonight attract gesture infant fringe vibrant",
         )
         .unwrap();
 
-        // find_par_with_wallet_until_find_all(
-        //     Box::new(wallet),
-        //     5000u32,
-        //     validating_split("xx,yy").unwrap(),
-        // );
         let vanities = find_par_with_wallet_until_find_all(Box::new(wallet), 5000u32, "xx,yy");
+
         assert_eq!(
             vanities
                 .into_iter()
@@ -317,33 +318,5 @@ mod tests {
                 .collect::<HashSet<String>>(),
             HashSet::from(["xx", "yy"].map(|x| x.to_string()))
         );
-
-        /*
-         fn one() {
-        let result = _find_one(input_deterministic!("9"));
-        assert_eq!(result.target, "9");
-        assert_eq!(
-            result.mnemonic,
-            "abandon abandon abandon top fire riot tonight attract gesture infant fringe vibrant"
-        );
-        assert_eq!(
-            result.address,
-            "account_rdx16xx7xu4mel6nae8kphnfsnh2qp24j658huglyamy35u8djmfwxc0a9"
-        );
-        assert_eq!(result.bip39_seed_fingerprint, "g1E2tnS4bUc");
-        assert_eq!(
-            result.cap33_export_string_account_part(),
-            "S^A7YA0KWtH020Y7skhc2IGszGSi+fp8ROHNKev7mtmkx5^12^g1E2tnS4bUc|9|12}"
-        );
-        assert_eq!(result.derivation_path, "m/44'/1022'/0'/0/12'");
-        assert_eq!(
-            result.public_key_hex(),
-            "03b600d0a5ad1f4db463bb2485cd881accc64a2f9fa7c44e1cd29ebfb9ad9a4c79"
-        );
-        assert_eq!(
-            result.cap33_export_string(),
-            "1^0^12]S^A7YA0KWtH020Y7skhc2IGszGSi+fp8ROHNKev7mtmkx5^12^g1E2tnS4bUc|9|12}"
-        );
-        */
     }
 }
