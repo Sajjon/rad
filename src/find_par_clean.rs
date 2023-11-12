@@ -4,6 +4,7 @@ use crate::vanity::Vanity;
 use std::collections::BTreeSet;
 use std::ops::Range;
 use std::thread;
+use std::time::SystemTime;
 
 use futures::channel::mpsc::channel;
 use futures::channel::mpsc::Receiver;
@@ -196,8 +197,13 @@ fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -
         bip39_seed_fingerprint: wallet.fingerprint(),
     }
 }
-pub fn find_par_with_wallet(wallet: Box<HDWallet>, targets: BTreeSet<String>) -> Receiver<Vanity> {
-    find_par_in_range(0..u32::MAX, wallet.clone(), move |c| {
+pub fn find_par_with_wallet(
+    wallet: Box<HDWallet>,
+    end_index: u32,
+    targets: BTreeSet<String>,
+) -> Receiver<Vanity> {
+    let now = SystemTime::now();
+    let receiver = find_par_in_range(0..end_index, wallet.clone(), move |c| {
         if targets.is_empty() {
             return Err(());
         }
@@ -211,13 +217,22 @@ pub fn find_par_with_wallet(wallet: Box<HDWallet>, targets: BTreeSet<String>) ->
             }
         }
         return Ok(vanity);
-    })
+    });
+    let time_elapsed = now.elapsed().unwrap();
+    let end_index_f32 = end_index as f32;
+    let speed = end_index_f32 / time_elapsed.as_secs_f32();
+    println!(
+        "✅ Exiting program, ran for '{}' sec, speed: '#{}' iters per second.",
+        time_elapsed.as_secs(),
+        speed
+    );
+    return receiver;
 }
 
 pub fn find_par_improved(input: BruteForceInput) -> Receiver<Vanity> {
     let wallet = HDWallet::from_entropy(input.int()).unwrap();
-    let targets = input.targets;
-    find_par_with_wallet(Box::new(wallet), targets)
+    let targets = input.targets.clone();
+    find_par_with_wallet(Box::new(wallet), input.index_end(), targets)
 }
 
 #[cfg(test)]
@@ -278,9 +293,13 @@ mod tests {
         .unwrap();
 
         let vanities: Vec<Vanity> = block_on(
-            find_par_with_wallet(Box::new(wallet), BTreeSet::from(["9".to_string()]))
-                .take(1)
-                .collect::<Vec<Vanity>>(),
+            find_par_with_wallet(
+                Box::new(wallet),
+                1000000u32,
+                BTreeSet::from(["9".to_string()]),
+            )
+            .take(1)
+            .collect::<Vec<Vanity>>(),
         );
         let vanity = vanities[0].clone();
         println!("✨ {}", vanity);
