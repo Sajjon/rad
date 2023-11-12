@@ -137,13 +137,17 @@ impl ChildKey {
         self.public_key().map(|pk| hex::encode(pk.to_vec()))
     }
 
-    fn address(&self) -> Result<String, RunError> {
+    fn address_on_network(&self, network: &NetworkDefinition) -> Result<String, RunError> {
         let pubkey = self.public_key()?;
         let address_data = ComponentAddress::virtual_account_from_public_key(&pubkey);
-        let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
+        let address_encoder = AddressBech32Encoder::new(network);
         address_encoder
             .encode(&address_data.to_vec()[..])
             .map_err(|_| RunError::AddressFromPublicKey)
+    }
+
+    fn address(&self) -> Result<String, RunError> {
+        self.address_on_network(&NetworkDefinition::mainnet())
     }
 
     fn address_suffix(&self) -> Result<String, RunError> {
@@ -191,12 +195,23 @@ mod tests {
             key0.public_key_hex().unwrap(),
             "02f669a43024d90fde69351ccc53022c2f86708d9b3c42693640733c5778235da5"
         );
+
+        assert_eq!(
+            key0.address_on_network(&NetworkDefinition::zabanet())
+                .unwrap(),
+            "account_tdx_e_169s2cfz044euhc4yjg4xe4pg55w97rq2c6jh50zsdcpuz5gk6cag6v"
+        );
         let key1 = wallet.derive_child(1);
         assert_eq!(key1.path.to_string(), "m/44'/1022'/0'/0/1'");
         // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L542
         assert_eq!(
             key1.public_key_hex().unwrap(),
             "023a41f437972033fa83c3c4df08dc7d68212ccac07396a29aca971ad5ba3c27c8"
+        );
+        assert_eq!(
+            key1.address_on_network(&NetworkDefinition::zabanet())
+                .unwrap(),
+            "account_tdx_e_16x88ghu9hd3hz4c9gumqjafrcwqtzk67wmpds7xg6uaz0kf42v5hju"
         );
     }
 }
