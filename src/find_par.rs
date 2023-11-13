@@ -10,6 +10,7 @@ use primitive_types::U256;
 use radix_engine_common::prelude::{
     AddressBech32Encoder, ComponentAddress, HashSet, NetworkDefinition, Secp256k1PublicKey,
 };
+use rayon::iter::ParallelBridge;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -174,71 +175,76 @@ fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -
     }
 }
 
-fn par_do_do_find<F>(range: Range<u32>, wallet: Box<HDWallet>, on_childkey: F) -> Vec<Vanity>
+fn par_do_do_find<E, F>(
+    range: Range<u32>,
+    wallet: Box<HDWallet>,
+    check_stop: E,
+    on_childkey: F,
+) -> Vec<Vanity>
 where
-    F: Fn(ChildKey) -> Result<Option<Vanity>, ()> + Send + Sync,
+    E: Fn() -> bool + Send + Sync,
+    F: Fn(ChildKey) -> Option<Vanity> + Send + Sync,
 {
     range
         .into_par_iter()
-        .map(|i| wallet.derive_child(i))
-        .map(|c| on_childkey(c))
-        .filter_map(|x| x.transpose())
-        .map(|x| match x {
-            Err(_) => None,
-            Ok(v) => Some(v),
+        .map(|i| {
+            if check_stop() {
+                None
+            } else {
+                Some(wallet.derive_child(i))
+            }
         })
         .while_some()
+        .map(|c| on_childkey(c))
+        .filter_map(|x| x)
         .collect()
 }
 
-fn par_do_find<F>(
+fn par_do_find(
     wallet: Box<HDWallet>,
     end_index: u32,
-    targets: HashSet<String>,
-    on_vanity: F,
-) -> Vec<Vanity>
-where
-    F: Fn(&Vanity) -> Result<(), ()> + Send + Sync,
-{
-    par_do_do_find(0..end_index, wallet.clone(), |c| {
-        let suff = c.address_suffix().unwrap();
+    targets: Arc<Mutex<HashSet<String>>>,
+) -> Vec<Vanity> {
+    par_do_do_find(
+        0..end_index,
+        wallet.clone(),
+        || targets.lock().unwrap().is_empty(),
+        |c| {
+            let suff = c.address_suffix().unwrap();
 
-        let mut result: Result<Option<Vanity>, ()> = Ok(None);
-        for target in targets.iter() {
-            if suff.ends_with(target) {
-                let vanity = vanity_from_childkey(&c, target, &wallet);
-                println!(
-                    "{}\n{}{}\n{}",
-                    "🎯".repeat(40),
-                    vanity.to_string(),
-                    INFO_DONATION_ADDR_ONLY.to_string(),
-                    "🎯".repeat(40),
-                );
-                match on_vanity(&vanity) {
-                    Ok(_) => result = Ok(Some(vanity)),
-                    Err(_) => result = Err(()),
+            let mut result: Option<Vanity> = Option::None;
+            let mut trgts = targets.lock().unwrap();
+            for target in trgts.iter() {
+                if suff.ends_with(target) {
+                    let vanity = vanity_from_childkey(&c, target, &wallet);
+                    println!(
+                        "{}\n{}{}\n{}",
+                        "🎯".repeat(40),
+                        vanity.to_string(),
+                        INFO_DONATION_ADDR_ONLY.to_string(),
+                        "🎯".repeat(40),
+                    );
+
+                    result = Some(vanity);
+
+                    break;
+                } else {
+                    continue;
                 }
-                break;
-            } else {
-                continue;
             }
-        }
-        return result;
-    })
+            if let Some(v) = &result {
+                (*trgts).remove(&v.target);
+            }
+            return result;
+        },
+    )
 }
 
 fn __par_find(wallet: Box<HDWallet>, end_index: u32, targets_: HashSet<String>) -> Vec<Vanity> {
     let targets = Arc::new(Mutex::new(targets_.clone()));
     let now = SystemTime::now();
 
-    let mut vector = par_do_find(wallet, end_index, targets_.clone(), |v| {
-        if targets.lock().unwrap().is_empty() {
-            return Err(());
-        } else {
-            targets.lock().unwrap().remove(&v.target);
-            return Ok(());
-        }
-    });
+    let mut vector = par_do_find(wallet, end_index, targets);
 
     let time_elapsed = now.elapsed().unwrap();
     // let end_index_f32 = end_index as f32;
