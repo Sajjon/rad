@@ -1,8 +1,8 @@
 extern crate default_args;
 use crate::{
     error::TargetSuffixError,
-    find::{find, find_n},
     find_par::par_find,
+    find_serial_orig::{find_n_serial_orig, find_serial_orig},
     params::{Bip39WordCount, BruteForceInput},
     run_config::RunConfig,
     vanity::Vanity,
@@ -52,7 +52,7 @@ pub fn _find<F>(input: BruteForceInput, on_result: F) -> ()
 where
     F: FnMut(Vanity) -> bool,
 {
-    find(input, RunConfig::new(false, 0, false, false), on_result)
+    find_serial_orig(input, RunConfig::new(false, 0, false, false), on_result)
 }
 
 pub fn _find_one(input: BruteForceInput) -> Vanity {
@@ -66,5 +66,5 @@ pub fn _find_one(input: BruteForceInput) -> Vanity {
 }
 
 pub fn _find_n(n: usize, input: BruteForceInput) -> Vec<Vanity> {
-    find_n(n, input, RunConfig::new(false, 0, false, false))
+    find_n_serial_orig(n, input, RunConfig::new(false, 0, false, false))
 }

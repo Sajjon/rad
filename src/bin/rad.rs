@@ -1,11 +1,12 @@
 use std::task::Poll;
 
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use futures::future::poll_fn;
 use futures::stream::StreamExt;
 use rad::file_reader::suffixes_from_file;
-use rad::find::{find, find_all, find_n};
 use rad::find_par::par_find;
+use rad::find_serial_orig::{find_all_serial_orig, find_n_serial_orig, find_serial_orig};
+use rad::find_serial_wallet::{find_all_serial_wallet, find_n_serial_wallet, find_serial_wallet};
 use rad::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
 use rad::params::{Bip39WordCount, BruteForceInput};
 use rad::run_config::RunConfig;
@@ -29,9 +30,8 @@ struct Cli {
     #[command(subcommand)]
     target_suffixes: TargetSuffixes,
 
-    /// If you dont wanna run in parallel
-    #[arg(short = 's', long, default_value_t = false)]
-    slow: bool,
+    #[arg(value_enum)]
+    mode: Mode,
 
     /// If we want to continue searching for more vanity accounts for a given
     /// target after we have found one. If `false` is passed, we will remove
@@ -63,6 +63,18 @@ struct Cli {
     end_index: u32,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
+enum Mode {
+    /// Parallel
+    Par,
+
+    /// Serial original
+    SerOrig,
+
+    /// Serial wallet
+    SerWal,
+}
+
 #[derive(Debug, Subcommand)]
 enum TargetSuffixes {
     /// Read target suffixes from file, one target per line (without any delimitor).
@@ -75,40 +87,41 @@ enum TargetSuffixes {
 }
 
 fn parallell(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
-    // let result = match matches_per_mnemonic {
-    //     0 => {
-    //         //find_all(input, run_config),
-    //         let rx = par_finding_all(input, run_config);
-    //         let stop_fut = poll_fn(|_cx| Poll::<Vanity>::Pending);
-    //         let mut stream = rx.take_until(stop_fut);
-    //         stream.by_ref().collect::<Vec<Vanity>>().await
-    //     }
-    //     _ => {
-    //         // find_n(cli.matches_per_mnemonic, input, run_config);
-    //         par_find(matches_per_mnemonic, input, run_config).await
-    //     }
-    // };
     let result = par_find(input, run_config);
     println!("✅ #{} results", result.len());
 }
 
-fn not_par(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
+fn serial(orig: bool, input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
     let now = SystemTime::now();
     let mut highest_index = 0;
     match matches_per_mnemonic {
         0 => {
-            find(input, run_config, |v| {
-                if v.index > highest_index {
-                    highest_index = v.index
-                }
-                return true; // continue
-            });
+            if orig {
+                find_serial_orig(input, run_config, |v| {
+                    if v.index > highest_index {
+                        highest_index = v.index
+                    }
+                    return true; // continue
+                });
+            } else {
+                find_serial_wallet(input, run_config, |v| {
+                    if v.index > highest_index {
+                        highest_index = v.index
+                    }
+                    return true; // continue
+                });
+            }
         }
         _ => {
-            let mut vec = find_n(matches_per_mnemonic, input, run_config);
-            vec.sort_by(|l, r| l.index.cmp(&r.index));
-
-            highest_index = vec.first().unwrap().index;
+            if orig {
+                let mut vec = find_n_serial_orig(matches_per_mnemonic, input, run_config);
+                vec.sort_by(|l, r| l.index.cmp(&r.index));
+                highest_index = vec.first().unwrap().index;
+            } else {
+                let mut vec = find_n_serial_wallet(matches_per_mnemonic, input, run_config);
+                vec.sort_by(|l, r| l.index.cmp(&r.index));
+                highest_index = vec.first().unwrap().index;
+            }
         }
     };
 
@@ -135,21 +148,29 @@ fn main() {
         cli.end_index,
         cli.multi_match_per_target,
         Bip39WordCount::Twelve,
-        Option::None,
+        Some(b"very fun coding rust"),
     )
     .expect("Valid input");
 
     let run_config = RunConfig::new(true, cli.print_pulse, true, true);
     let matches_per_mnemonic = cli.matches_per_mnemonic;
-    println!("{}", INFO_WITH_DONATION_QR);
+    // println!("{}", INFO_WITH_DONATION_QR);
     let now = SystemTime::now();
-    if cli.slow {
-        println!("‼️ you have disabled parallelisation, this makes the program much much much much slower. Please consider enabling parallelisation");
-        not_par(input, run_config, matches_per_mnemonic);
-    } else {
-        println!("🚀 Running in parallell for maximum speed");
-        parallell(input, run_config, matches_per_mnemonic);
+    match cli.mode {
+        Mode::Par => {
+            println!("🚀 Running in parallell for maximum speed");
+            parallell(input, run_config, matches_per_mnemonic);
+        }
+        Mode::SerOrig => {
+            println!("‼️ SERIAL orig 🙅🏻‍♀️");
+            serial(true, input, run_config, matches_per_mnemonic);
+        }
+        Mode::SerWal => {
+            println!("‼️ Serial WALLET");
+            serial(false, input, run_config, matches_per_mnemonic);
+        }
     }
+
     let elapsed = now.elapsed().unwrap();
     println!("✅ Exiting program, ran for '{} sec'", elapsed.as_secs());
 }

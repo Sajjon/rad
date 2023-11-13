@@ -16,10 +16,10 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         .measurement_time(Duration::from_secs(200)); // target "xyz" takes ~150 sec on Macbook Pro M2
     group.bench_function("benchy", |b| {
         b.iter(|| {
-            black_box(
-                // _find_one(input!("xyz").unwrap()),
-                par_find(input!("p").unwrap(), RunConfig::new(false, 0, false, false)),
-            )
+            // black_box(
+            // _find_one(input!("xyz").unwrap()),
+            par_find(input!("p").unwrap(), RunConfig::new(false, 0, false, false));
+            // )
         })
     });
     group.finish();

@@ -11,7 +11,6 @@ pub struct Vanity {
     pub address: String,
     /// Last 6 chars of the address, stored property for higher performance, used to check match against `target`.
     pub address_suffix: String,
-    pub derivation_path: String,
     pub index: u32,
     pub public_key_bytes: Vec<u8>,
     pub mnemonic: String,
@@ -23,6 +22,9 @@ pub struct Vanity {
 }
 
 impl Vanity {
+    pub fn derivation_path(&self) -> String {
+        format!("m/44'/1022'/0'/0/{}'", self.index)
+    }
     pub fn public_key_hex(&self) -> String {
         hex::encode(&self.public_key_bytes)
     }
@@ -85,10 +87,17 @@ impl Vanity {
 
 impl std::fmt::Display for Vanity {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // write!(
+        //     f,
+        //     "Address: {} (🎯 '{}')\nPath: {}\nPublicKey: {}\nIn Babylon mobile app: 'Import from a Legacy Wallet', by scanning:\n{}\n{}",
+        //     self.address, self.target, self.derivation_path, self.public_key_hex(), self.cap33_qr_code_string(), self.mnemonic_phrase_grid_string()
+        // )
         write!(
             f,
-            "Address: {} (🎯 '{}')\nPath: {}\nPublicKey: {}\nIn Babylon mobile app: 'Import from a Legacy Wallet', by scanning:\n{}\n{}",
-            self.address, self.target, self.derivation_path, self.public_key_hex(), self.cap33_qr_code_string(), self.mnemonic_phrase_grid_string()
+            "Address: {} (🎯 '{}')\nPublicKey: {}\n",
+            self.address,
+            self.target,
+            self.derivation_path()
         )
     }
 }

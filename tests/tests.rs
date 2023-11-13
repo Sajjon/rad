@@ -5,7 +5,7 @@ mod tests {
         error::TargetSuffixError,
         input, input_deterministic,
         params::{Bip39WordCount, MAX_INDEX},
-        test_utils::{_find_n, _find_one, blocking_find_one},
+        test_utils::{_find_n, _find_one},
     };
 
     #[test]

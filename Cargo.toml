@@ -56,7 +56,10 @@ opt-level = 3
 codegen-units = 1
 panic = "abort"
 strip = "symbols"
-debug = false
 lto = true
 debug-assertions = false
 overflow-checks = false
+debug = true
+
+[profile.bench]
+debug = true

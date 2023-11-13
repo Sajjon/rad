@@ -1,17 +1,15 @@
 use crate::info::INFO_DONATION_ADDR_ONLY;
 use crate::params::{validating_split, Bip39WordCount, BruteForceInput, MAX_SUFFIX_LENGTH};
-use crate::run_config::{self, RunConfig};
+use crate::run_config::RunConfig;
 use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
 use base64::{engine::general_purpose, Engine as _};
-use bip32::{DerivationPath, Seed, XPrv};
+use bip32::{ChildNumber, DerivationPath, Seed, XPrv};
 use bip39::Mnemonic;
-use itertools::Itertools;
 use primitive_types::U256;
 use radix_engine_common::prelude::{
     AddressBech32Encoder, ComponentAddress, HashSet, NetworkDefinition, Secp256k1PublicKey,
 };
-use rayon::iter::ParallelBridge;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
@@ -58,23 +56,18 @@ impl Path {
     }
 }
 
-#[derive(Clone)]
 pub struct HDWallet {
     pub entropy: U256,
     pub mnemonic: Mnemonic,
-    pub intermediary_key: ChildKey,
+    pub intermediary_key_priv: XPrv,
+    pub intermediary_key_path: Path,
+    pub seed: Seed,
+    pub mnemonic_phrase: String,
 }
 
 impl HDWallet {
-    pub fn seed(&self) -> Seed {
-        Seed::new(self.mnemonic.to_seed("")) // bip32 create
-    }
-    pub fn mnemonic_phrase(&self) -> String {
-        self.mnemonic.to_string()
-    }
-
     pub fn fingerprint(&self) -> String {
-        general_purpose::STANDARD_NO_PAD.encode(&self.seed().as_bytes()[56..])
+        general_purpose::STANDARD_NO_PAD.encode(&self.seed.as_bytes()[56..])
     }
 
     fn new(entropy: U256, mnemonic: Mnemonic) -> Result<Self, RunError> {
@@ -90,12 +83,14 @@ impl HDWallet {
             index: 0,
             derivation_path: intermediary_path,
         };
-        let intermediary_key = ChildKey { path, key };
+        // let intermediary_key = ChildKey { path, key };
         Ok(Self {
             entropy,
-            mnemonic,
-            // seed,
-            intermediary_key,
+            mnemonic: mnemonic.clone(),
+            seed,
+            intermediary_key_priv: key,
+            intermediary_key_path: path,
+            mnemonic_phrase: mnemonic.to_string(),
         })
     }
 
@@ -116,69 +111,61 @@ impl HDWallet {
 
 #[derive(Clone)]
 pub struct ChildKey {
-    pub path: Path,
+    pub index: u32,
     pub key: XPrv,
-}
-
-impl ChildKey {
-    pub fn public_key(&self) -> Result<Secp256k1PublicKey, RunError> {
-        let child_xpub = self.key.public_key();
-        let verification_key = child_xpub.public_key();
-        let public_key_point: k256::EncodedPoint = verification_key.to_encoded_point(true);
-        let public_key_bytes = public_key_point.as_bytes();
-        Secp256k1PublicKey::try_from(public_key_bytes).map_err(|_| RunError::PublicKeyFromBytes)
-    }
-
-    pub fn public_key_hex(&self) -> Result<String, RunError> {
-        self.public_key().map(|pk| hex::encode(pk.to_vec()))
-    }
-
-    fn address_on_network(&self, network: &NetworkDefinition) -> Result<String, RunError> {
-        let pubkey = self.public_key()?;
-        let address_data = ComponentAddress::virtual_account_from_public_key(&pubkey);
-        let address_encoder = AddressBech32Encoder::new(network);
-        address_encoder
-            .encode(&address_data.to_vec()[..])
-            .map_err(|_| RunError::AddressFromPublicKey)
-    }
-
-    pub fn address(&self) -> Result<String, RunError> {
-        self.address_on_network(&NetworkDefinition::mainnet())
-    }
-
-    pub fn address_suffix(&self) -> Result<String, RunError> {
-        let address = self.address()?;
-        let suffix = &address[address.len() - MAX_SUFFIX_LENGTH..];
-        return Ok(suffix.to_string());
-    }
+    pub public_key_bytes: Vec<u8>,
+    pub address: String,
+    pub suffix: String,
 }
 
 impl HDWallet {
     pub fn derive_child(&self, index: u32) -> ChildKey {
-        let path = self.intermediary_key.path.child(index);
+        // let path = self.intermediary_key_path.child(index);
 
-        let key = XPrv::derive_from_path(&self.seed(), &path.derivation_path).expect("hd key");
+        let child_xprv = self
+            .intermediary_key_priv
+            .derive_child(ChildNumber::new(index, true).unwrap())
+            .unwrap();
 
-        return ChildKey { path, key };
+        let child_xpub = child_xprv.public_key();
+        let verification_key = child_xpub.public_key();
+        let public_key_point: k256::EncodedPoint = verification_key.to_encoded_point(true);
+        let public_key_bytes = public_key_point.as_bytes();
+        let re_secp256k1_pubkey =
+            Secp256k1PublicKey::try_from(public_key_bytes).expect("RE secp256k1 pubkey");
+        let address_data = ComponentAddress::virtual_account_from_public_key(&re_secp256k1_pubkey);
+        let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
+        let address = address_encoder
+            .encode(&address_data.to_vec()[..])
+            .expect("bech32 account address");
+
+        let suffix = &address[address.len() - MAX_SUFFIX_LENGTH..];
+
+        return ChildKey {
+            index,
+            key: child_xprv,
+            public_key_bytes: re_secp256k1_pubkey.to_vec().clone(),
+            address: address.clone(),
+            suffix: suffix.to_string(),
+        };
     }
 }
 
 pub fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -> Vanity {
     Vanity {
         target: target.to_string(),
-        address: child_key.address().unwrap(),
-        address_suffix: child_key.address_suffix().unwrap(),
-        derivation_path: child_key.path.to_string(),
-        index: child_key.path.index,
-        public_key_bytes: child_key.public_key().unwrap().to_vec(),
-        mnemonic: wallet.mnemonic_phrase(),
+        address: child_key.address.clone(),
+        address_suffix: child_key.suffix.clone(),
+        index: child_key.index,
+        public_key_bytes: child_key.public_key_bytes.clone(),
+        mnemonic: wallet.mnemonic_phrase.clone(),
         bip39_seed_fingerprint: wallet.fingerprint(),
     }
 }
 
 fn par_do_do_find<E, F>(
     range: Range<u32>,
-    wallet: Box<HDWallet>,
+    wallet: &Box<HDWallet>,
     check_stop: E,
     on_childkey: F,
 ) -> Vec<Vanity>
@@ -209,10 +196,10 @@ fn par_do_find(
 ) -> Vec<Vanity> {
     par_do_do_find(
         0..end_index,
-        wallet.clone(),
+        &wallet,
         || targets.lock().unwrap().is_empty(),
         |c| {
-            let suff = c.address_suffix().unwrap();
+            let suff = c.suffix.clone();
 
             let mut result: Option<Vanity> = Option::None;
             let mut trgts = targets.lock().unwrap();
@@ -220,13 +207,14 @@ fn par_do_find(
                 if suff.ends_with(target) {
                     let vanity = vanity_from_childkey(&c, target, &wallet);
                     if run_config.print_found_vanity_result {
-                        println!(
-                            "{}\n{}{}\n{}",
-                            "🎯".repeat(40),
-                            vanity.to_string(),
-                            INFO_DONATION_ADDR_ONLY.to_string(),
-                            "🎯".repeat(40),
-                        );
+                        // println!(
+                        //     "{}\n{}{}\n{}",
+                        //     "🎯".repeat(40),
+                        //     vanity.to_string(),
+                        //     INFO_DONATION_ADDR_ONLY.to_string(),
+                        //     "🎯".repeat(40),
+                        // );
+                        println!("{}", vanity.to_string());
                     }
 
                     result = Some(vanity);
@@ -305,7 +293,7 @@ mod tests {
     #[test]
     fn mnemonic() {
         let wallet = HDWallet::from_entropy(U256::zero());
-        assert_eq!(wallet.unwrap().mnemonic_phrase(), "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+        assert_eq!(wallet.unwrap().mnemonic_phrase, "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
     }
 
     #[test]
@@ -318,26 +306,16 @@ mod tests {
         assert_eq!(key0.path.to_string(), "m/44'/1022'/0'/0/0'");
         // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L494
         assert_eq!(
-            key0.public_key_hex().unwrap(),
+            hex::encode(key0.public_key_bytes),
             "02f669a43024d90fde69351ccc53022c2f86708d9b3c42693640733c5778235da5"
         );
 
-        assert_eq!(
-            key0.address_on_network(&NetworkDefinition::zabanet())
-                .unwrap(),
-            "account_tdx_e_169s2cfz044euhc4yjg4xe4pg55w97rq2c6jh50zsdcpuz5gk6cag6v"
-        );
         let key1 = wallet.derive_child(1);
         assert_eq!(key1.path.to_string(), "m/44'/1022'/0'/0/1'");
         // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L542
         assert_eq!(
-            key1.public_key_hex().unwrap(),
+            hex::encode(key1.public_key_bytes),
             "023a41f437972033fa83c3c4df08dc7d68212ccac07396a29aca971ad5ba3c27c8"
-        );
-        assert_eq!(
-            key1.address_on_network(&NetworkDefinition::zabanet())
-                .unwrap(),
-            "account_tdx_e_16x88ghu9hd3hz4c9gumqjafrcwqtzk67wmpds7xg6uaz0kf42v5hju"
         );
     }
 
