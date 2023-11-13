@@ -231,7 +231,7 @@ fn __par_find(wallet: Box<HDWallet>, end_index: u32, targets_: HashSet<String>) 
     let targets = Arc::new(Mutex::new(targets_.clone()));
     let now = SystemTime::now();
 
-    let vector = par_do_find(wallet, end_index, targets_.clone(), |v| {
+    let mut vector = par_do_find(wallet, end_index, targets_.clone(), |v| {
         if targets.lock().unwrap().is_empty() {
             return Err(());
         } else {
@@ -241,10 +241,13 @@ fn __par_find(wallet: Box<HDWallet>, end_index: u32, targets_: HashSet<String>) 
     });
 
     let time_elapsed = now.elapsed().unwrap();
-    let end_index_f32 = end_index as f32;
-    let speed = end_index_f32 / time_elapsed.as_secs_f32();
+    // let end_index_f32 = end_index as f32;
+    vector.sort_by(|l, r| l.index.cmp(&r.index));
+    let highest_index = vector.first().unwrap().index;
+    let highest_index_f32 = highest_index as f32;
+    let speed = highest_index_f32 / time_elapsed.as_secs_f32();
     println!(
-        "✅ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
+        "✅ ⚡️ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
         time_elapsed.as_millis(),
         speed
     );

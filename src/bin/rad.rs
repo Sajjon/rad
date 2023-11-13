@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 use futures::future::poll_fn;
 use futures::stream::StreamExt;
 use rad::file_reader::suffixes_from_file;
-use rad::find::{find_all, find_n};
+use rad::find::{find, find_all, find_n};
 use rad::find_par::par_find;
 use rad::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
 use rad::params::{Bip39WordCount, BruteForceInput};
@@ -93,14 +93,33 @@ fn parallell(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic
 }
 
 fn not_par(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
+    let now = SystemTime::now();
+    let mut highest_index = 0;
     match matches_per_mnemonic {
         0 => {
-            find_all(input, run_config);
+            find(input, run_config, |v| {
+                if v.index > highest_index {
+                    highest_index = v.index
+                }
+                return true; // continue
+            });
         }
         _ => {
-            find_n(matches_per_mnemonic, input, run_config);
+            let mut vec = find_n(matches_per_mnemonic, input, run_config);
+            vec.sort_by(|l, r| l.index.cmp(&r.index));
+
+            highest_index = vec.first().unwrap().index;
         }
     };
+
+    let time_elapsed = now.elapsed().unwrap();
+    let highest_index_f32 = highest_index as f32;
+    let speed = highest_index_f32 / time_elapsed.as_secs_f32();
+    println!(
+        "✅ 🐌 Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
+        time_elapsed.as_millis(),
+        speed
+    );
 }
 
 fn main() {
