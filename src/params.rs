@@ -20,7 +20,7 @@ impl Bip39WordCount {
     }
     pub fn max_int(&self) -> U256 {
         match self {
-            Self::Twelve => U256::from(U128::MAX), //BigUint::from_bytes_be(&[0xffu8; 16]),
+            Self::Twelve => U256::from(U128::MAX),
             Self::TwentyFour => U256::MAX,
         }
     }
