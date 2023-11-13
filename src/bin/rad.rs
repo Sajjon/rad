@@ -5,7 +5,7 @@ use futures::future::poll_fn;
 use futures::stream::StreamExt;
 use rad::file_reader::suffixes_from_file;
 use rad::find::{find_all, find_n};
-use rad::find_par::{par_find, par_finding_all};
+use rad::find_par::par_find;
 use rad::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
 use rad::params::{Bip39WordCount, BruteForceInput};
 use rad::run_config::RunConfig;
@@ -74,20 +74,21 @@ enum TargetSuffixes {
     Targets { csv: String },
 }
 
-async fn parallell(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
-    let result = match matches_per_mnemonic {
-        0 => {
-            //find_all(input, run_config),
-            let rx = par_finding_all(input, run_config);
-            let stop_fut = poll_fn(|_cx| Poll::<Vanity>::Pending);
-            let mut stream = rx.take_until(stop_fut);
-            stream.by_ref().collect::<Vec<Vanity>>().await
-        }
-        _ => {
-            // find_n(cli.matches_per_mnemonic, input, run_config);
-            par_find(matches_per_mnemonic, input, run_config).await
-        }
-    };
+fn parallell(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
+    // let result = match matches_per_mnemonic {
+    //     0 => {
+    //         //find_all(input, run_config),
+    //         let rx = par_finding_all(input, run_config);
+    //         let stop_fut = poll_fn(|_cx| Poll::<Vanity>::Pending);
+    //         let mut stream = rx.take_until(stop_fut);
+    //         stream.by_ref().collect::<Vec<Vanity>>().await
+    //     }
+    //     _ => {
+    //         // find_n(cli.matches_per_mnemonic, input, run_config);
+    //         par_find(matches_per_mnemonic, input, run_config).await
+    //     }
+    // };
+    let result = par_find(input);
     println!("✅ #{} results", result.len());
 }
 
@@ -102,8 +103,7 @@ fn not_par(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: 
     };
 }
 
-#[async_std::main]
-async fn main() {
+fn main() {
     let cli = Cli::parse();
 
     let csv_string: String = match cli.target_suffixes {
@@ -129,7 +129,7 @@ async fn main() {
         not_par(input, run_config, matches_per_mnemonic);
     } else {
         println!("🚀 Running in parallell for maximum speed");
-        parallell(input, run_config, matches_per_mnemonic).await;
+        parallell(input, run_config, matches_per_mnemonic);
     }
     let elapsed = now.elapsed().unwrap();
     println!("✅ Exiting program, ran for '{} sec'", elapsed.as_secs());

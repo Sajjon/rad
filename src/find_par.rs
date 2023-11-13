@@ -1,250 +1,328 @@
-use crate::params::{Bip39WordCount, BruteForceInput, MAX_SUFFIX_LENGTH};
-use crate::run_config::RunConfig;
+use crate::info::INFO_DONATION_ADDR_ONLY;
+use crate::params::{validating_split, Bip39WordCount, BruteForceInput, MAX_SUFFIX_LENGTH};
 use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
-use std::collections::HashSet;
-use std::fmt;
-use std::ops::Range;
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-use ansi_escapes::EraseLines;
 use base64::{engine::general_purpose, Engine as _};
-use bip32::{ChildNumber, Seed, XPrv};
+use bip32::{DerivationPath, Seed, XPrv};
+use bip39::Mnemonic;
+use itertools::Itertools;
 use primitive_types::U256;
 use radix_engine_common::prelude::{
-    AddressBech32Encoder, ComponentAddress, NetworkDefinition, Secp256k1PublicKey,
+    AddressBech32Encoder, ComponentAddress, HashSet, NetworkDefinition, Secp256k1PublicKey,
 };
-use std::ops::AddAssign;
+use std::ops::Range;
+use std::sync::{Arc, Mutex};
+use std::time::SystemTime;
 
-use futures::channel::mpsc::channel;
-use futures::channel::mpsc::Receiver;
-use futures::stream::StreamExt;
-use rayon::{
-    prelude::{IntoParallelIterator, ParallelIterator},
-    range::Iter,
-};
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use thiserror::Error;
+#[derive(Debug, Error, PartialEq)]
+pub enum RunError {
+    #[error("Failed to parse a bip32 path from string")]
+    ParseDerivationPath,
 
-#[derive(Debug)]
-struct NeedleInput {
-    outer: U256,
-    inner: u32,
-    intermediary_xprv: XPrv,
-    mnemonic_phrase: String,
-    seed_fingerprint: String,
+    #[error("Failed to derive a child key from a derivation path")]
+    DeriveChildKeyFromPath,
+
+    #[error("Failed to parse mnemonic from phrase")]
+    MnemonicFromPhrase,
+
+    #[error("Failed to parse PublicKey from bytes")]
+    PublicKeyFromBytes,
+
+    #[error("Failed to encode Address from PublicKey")]
+    AddressFromPublicKey,
+
+    #[error("Invalid target '{0}', contains forbidden character {1}.")]
+    InvalidBech32Character(String, char),
 }
 
-impl std::fmt::Display for NeedleInput {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "outer: {}, inner: {}",
-            self.outer.to_string(),
-            self.inner
-        )
+#[derive(Clone)]
+pub struct Path {
+    pub index: u32,
+    pub derivation_path: DerivationPath,
+}
+impl Path {
+    pub fn to_string(&self) -> String {
+        self.derivation_path.to_string()
     }
-}
-
-impl NeedleInput {
-    fn new(
-        outer: U256,
-        inner: u32,
-        intermediary_xprv: XPrv,
-        mnemonic_phrase: String,
-        seed_fingerprint: String,
-    ) -> Self {
+    pub fn child(&self, index: u32) -> Self {
         Self {
-            outer,
-            inner,
-            intermediary_xprv,
-            mnemonic_phrase,
-            seed_fingerprint,
+            index,
+            derivation_path: format!("{}/{}'", self.derivation_path.to_string(), index)
+                .parse()
+                .unwrap(),
         }
     }
 }
 
-// Custom error type; can be any type which defined in the current crate
-// 💡 In here, we use a simple "unit struct" to simplify the example
-struct MyError;
+#[derive(Clone)]
+pub struct HDWallet {
+    pub entropy: U256,
+    pub mnemonic: Mnemonic,
+    pub intermediary_key: ChildKey,
+}
 
-// Implement std::fmt::Display for MyError
-impl fmt::Display for MyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "An Error Occurred, Please Try Again!") // user-facing output
+impl HDWallet {
+    pub fn seed(&self) -> Seed {
+        Seed::new(self.mnemonic.to_seed("")) // bip32 create
+    }
+    pub fn mnemonic_phrase(&self) -> String {
+        self.mnemonic.to_string()
+    }
+
+    pub fn fingerprint(&self) -> String {
+        general_purpose::STANDARD_NO_PAD.encode(&self.seed().as_bytes()[56..])
+    }
+
+    fn new(entropy: U256, mnemonic: Mnemonic) -> Result<Self, RunError> {
+        let seed = Seed::new(mnemonic.to_seed("")); // bip32 create
+
+        let intermediary_path_ = "m/44'/1022'/0'/0";
+        let intermediary_path = intermediary_path_
+            .parse()
+            .map_err(|_| RunError::ParseDerivationPath)?;
+        let key = XPrv::derive_from_path(&seed, &intermediary_path)
+            .map_err(|_| RunError::DeriveChildKeyFromPath)?;
+        let path = Path {
+            index: 0,
+            derivation_path: intermediary_path,
+        };
+        let intermediary_key = ChildKey { path, key };
+        Ok(Self {
+            entropy,
+            mnemonic,
+            // seed,
+            intermediary_key,
+        })
+    }
+
+    pub fn from_mnemonic_phrase(mnemonic_phrase: &str) -> Result<Self, RunError> {
+        // let mnemonic = Mnemonic::from(mnemonic_phrase);
+        let mnemonic =
+            Mnemonic::parse(mnemonic_phrase).map_err(|_| RunError::MnemonicFromPhrase)?;
+        let entropy_bytes = mnemonic.to_entropy();
+        let entropy = U256::from_big_endian(&entropy_bytes.as_slice());
+        return Self::new(entropy, mnemonic);
+    }
+
+    pub fn from_entropy(entropy: U256) -> Result<Self, RunError> {
+        let mnemonic = mnemonic_from_u256(&entropy, &Bip39WordCount::Twelve);
+        return Self::new(entropy, mnemonic);
     }
 }
 
-// Implement std::fmt::Debug for MyError
-impl fmt::Debug for MyError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{{ file: {}, line: {} }}", file!(), line!()) // programmer-facing output
+#[derive(Clone)]
+pub struct ChildKey {
+    pub path: Path,
+    pub key: XPrv,
+}
+
+impl ChildKey {
+    pub fn public_key(&self) -> Result<Secp256k1PublicKey, RunError> {
+        let child_xpub = self.key.public_key();
+        let verification_key = child_xpub.public_key();
+        let public_key_point: k256::EncodedPoint = verification_key.to_encoded_point(true);
+        let public_key_bytes = public_key_point.as_bytes();
+        Secp256k1PublicKey::try_from(public_key_bytes).map_err(|_| RunError::PublicKeyFromBytes)
+    }
+
+    pub fn public_key_hex(&self) -> Result<String, RunError> {
+        self.public_key().map(|pk| hex::encode(pk.to_vec()))
+    }
+
+    fn address_on_network(&self, network: &NetworkDefinition) -> Result<String, RunError> {
+        let pubkey = self.public_key()?;
+        let address_data = ComponentAddress::virtual_account_from_public_key(&pubkey);
+        let address_encoder = AddressBech32Encoder::new(network);
+        address_encoder
+            .encode(&address_data.to_vec()[..])
+            .map_err(|_| RunError::AddressFromPublicKey)
+    }
+
+    pub fn address(&self) -> Result<String, RunError> {
+        self.address_on_network(&NetworkDefinition::mainnet())
+    }
+
+    pub fn address_suffix(&self) -> Result<String, RunError> {
+        let address = self.address()?;
+        let suffix = &address[address.len() - MAX_SUFFIX_LENGTH..];
+        return Ok(suffix.to_string());
     }
 }
 
-fn __find<F, G, H, T, R>(
-    draining: HashSet<T>,
-    print_mnemonic: bool,
-    print_result: bool,
-    print_pulse: U256,
-    mut outer: impl Iterator<Item = U256> + Send + 'static,
-    inner: Iter<u32>,
-    make_candidate: F,
-    eval_candidate: G,
-    drain_with_candidate: H,
-) -> Receiver<R>
+impl HDWallet {
+    fn derive_child(&self, index: u32) -> ChildKey {
+        let path = self.intermediary_key.path.child(index);
+
+        let key = XPrv::derive_from_path(&self.seed(), &path.derivation_path).expect("hd key");
+
+        return ChildKey { path, key };
+    }
+}
+
+fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -> Vanity {
+    Vanity {
+        target: target.to_string(),
+        address: child_key.address().unwrap(),
+        address_suffix: child_key.address_suffix().unwrap(),
+        derivation_path: child_key.path.to_string(),
+        index: child_key.path.index,
+        public_key_bytes: child_key.public_key().unwrap().to_vec(),
+        mnemonic: wallet.mnemonic_phrase(),
+        bip39_seed_fingerprint: wallet.fingerprint(),
+    }
+}
+
+fn par_do_do_find<F>(range: Range<u32>, wallet: Box<HDWallet>, on_childkey: F) -> Vec<Vanity>
 where
-    F: Fn(&NeedleInput, T) -> R + Send + Sync + Copy + 'static,
-    G: Fn(&R, T) -> bool + Send + Sync + 'static,
-    H: Fn(&R) -> T + Send + Sync + 'static,
-    T: std::fmt::Debug + Ord + Clone + Send + Sync + 'static,
-    R: std::fmt::Debug + std::fmt::Display + Send + 'static,
+    F: Fn(ChildKey) -> Result<Option<Vanity>, ()> + Send + Sync,
 {
-    // let (tx, rx) = channel(1000);
-
-    todo!()
-    // thread::spawn(move || {
-    //     let to_drain_mutex = Arc::new(Mutex::new(draining));
-    //     let attempts_since_last_find = Arc::new(Mutex::new(U256::zero()));
-    //     outer.try_for_each(|o| {
-    //         let mnemonic = mnemonic_from_u256(&o, &Bip39WordCount::Twelve);
-    //         let mnemonic_phrase = mnemonic.to_string(); // bip39 crate (since it support 12 word mnemonics)
-    //         if print_mnemonic {
-    //             println!("🔮 mnemonic: {}", mnemonic_phrase);
-    //         }
-    //         let seed_ = mnemonic.to_seed(""); // bip39 crate (since it support 12 word mnemonics)
-    //         let seed = Seed::new(seed_); // bip32 create
-    //         let seed_fingerprint = general_purpose::STANDARD_NO_PAD.encode(&seed_[56..]);
-    //         let intermediary_path_ = "m/44'/1022'/0'/0";
-    //         let intermediary_path = intermediary_path_.parse().expect("intermediary path");
-    //         let intermediary_xprv =
-    //             XPrv::derive_from_path(&seed, &intermediary_path).expect("hd key");
-
-    //         inner
-    //             .clone()
-    //             .flat_map(|i| {
-    //                 let mut attempts = attempts_since_last_find.lock().unwrap();
-    //                 attempts.add_assign(U256::one());
-
-    //                 if !print_pulse.is_zero() {
-    //                     if attempts.clone() % print_pulse == U256::zero() {
-    //                         print!("{}", EraseLines(2));
-    //                         println!("⏳ Attempts since last find: {}", attempts);
-    //                     }
-    //                 }
-    //                 let ni = NeedleInput::new(
-    //                     o.clone(),
-    //                     i.clone(),
-    //                     intermediary_xprv.clone(),
-    //                     mnemonic_phrase.clone(),
-    //                     seed_fingerprint.clone(),
-    //                 );
-    //                 let candidates: Vec<R> = to_drain_mutex
-    //                     .clone()
-    //                     .lock()
-    //                     .unwrap()
-    //                     .clone()
-    //                     .into_iter()
-    //                     .filter_map(|target| {
-    //                         let c = make_candidate(&ni, target.clone());
-    //                         if eval_candidate(&c, target.clone()) {
-    //                             *attempts = U256::zero();
-    //                             if print_result {
-    //                                 println!("{}", c);
-    //                             }
-    //                             Some(c)
-    //                         } else {
-    //                             None
-    //                         }
-    //                     })
-    //                     .collect();
-    //                 return candidates;
-    //             })
-    //             .try_for_each_with(tx.clone(), |s, x| {
-    //                 let d = drain_with_candidate(&x);
-    //                 return s.try_send(x).map_err(|_| MyError).and_then(|_| {
-    //                     let mut to_drain = to_drain_mutex.lock().unwrap();
-    //                     to_drain.remove(&d);
-    //                     if to_drain.is_empty() {
-    //                         Err(MyError)
-    //                     } else {
-    //                         Ok(())
-    //                     }
-    //                 });
-    //             })
-    //     })
-    // });
-    // return rx;
-}
-
-fn _find(
-    draining: HashSet<String>,
-    outer_start: U256,
-    inner: Range<u32>,
-    print_mnemonic: bool,
-    print_result: bool,
-    print_pulse: U256,
-) -> Receiver<Vanity> {
-    __find(
-        draining,
-        print_mnemonic,
-        print_result,
-        print_pulse,
-        num_iter::range_step_from(outer_start, U256::from(1)),
-        inner.into_par_iter(), // <-- PARALLELIZATION
-        |ni, target| {
-            // Radix Olympia BIP44-LIKE path (last component is incorrectly hardened.)
-            let child_xprv = ni
-                .intermediary_xprv
-                .derive_child(ChildNumber::new(ni.inner, true).unwrap())
-                .expect("bip44 LIKE");
-            let child_xpub = child_xprv.public_key();
-            let verification_key = child_xpub.public_key();
-            let public_key_point: k256::EncodedPoint = verification_key.to_encoded_point(true);
-            let public_key_bytes = public_key_point.as_bytes();
-            let re_secp256k1_pubkey =
-                Secp256k1PublicKey::try_from(public_key_bytes).expect("RE secp256k1 pubkey");
-            let address_data =
-                ComponentAddress::virtual_account_from_public_key(&re_secp256k1_pubkey);
-            let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
-            let address = address_encoder
-                .encode(&address_data.to_vec()[..])
-                .expect("bech32 account address");
-
-            let suffix = &address[address.len() - MAX_SUFFIX_LENGTH..];
-
-            let candidate = Vanity {
-                target: target.clone(),
-                address: address.clone(),
-                address_suffix: suffix.to_string(),
-                derivation_path: format!("{}/{}'", "m/44'/1022'/0'/0", ni.inner).to_string(),
-                index: ni.inner,
-                mnemonic: ni.mnemonic_phrase.clone(),
-                public_key_bytes: Vec::from(public_key_bytes),
-                bip39_seed_fingerprint: ni.seed_fingerprint.clone(),
-            };
-
-            // let suffix = &address[address.len() - MAX_SUFFIX_LENGTH..];
-            return candidate;
-        },
-        |x: &Vanity, target| x.address_suffix.ends_with(&target),
-        |x| x.target.clone(),
-    )
-}
-
-pub fn par_finding_all(input: BruteForceInput, run_config: RunConfig) -> Receiver<Vanity> {
-    _find(
-        input.targets.clone(),
-        input.int().clone(),
-        0u32..input.index_end(),
-        true,
-        run_config.print_found_vanity_result,
-        run_config.print_pulse,
-    )
-}
-
-pub async fn par_find(take: usize, input: BruteForceInput, run_config: RunConfig) -> Vec<Vanity> {
-    par_finding_all(input, run_config)
-        .take(take)
+    range
+        .into_par_iter()
+        .map(|i| wallet.derive_child(i))
+        .map(|c| on_childkey(c))
+        .filter_map(|x| x.transpose())
+        .map(|x| match x {
+            Err(_) => None,
+            Ok(v) => Some(v),
+        })
+        .while_some()
         .collect()
-        .await
+}
+
+fn par_do_find<F>(
+    wallet: Box<HDWallet>,
+    end_index: u32,
+    targets: HashSet<String>,
+    on_vanity: F,
+) -> Vec<Vanity>
+where
+    F: Fn(&Vanity) -> Result<(), ()> + Send + Sync,
+{
+    par_do_do_find(0..end_index, wallet.clone(), |c| {
+        let suff = c.address_suffix().unwrap();
+
+        let mut result: Result<Option<Vanity>, ()> = Ok(None);
+        for target in targets.iter() {
+            if suff.ends_with(target) {
+                let vanity = vanity_from_childkey(&c, target, &wallet);
+                println!(
+                    "{}\n{}{}\n{}",
+                    "🎯".repeat(40),
+                    vanity.to_string(),
+                    INFO_DONATION_ADDR_ONLY.to_string(),
+                    "🎯".repeat(40),
+                );
+                match on_vanity(&vanity) {
+                    Ok(_) => result = Ok(Some(vanity)),
+                    Err(_) => result = Err(()),
+                }
+                break;
+            } else {
+                continue;
+            }
+        }
+        return result;
+    })
+}
+
+fn __par_find(wallet: Box<HDWallet>, end_index: u32, targets_: HashSet<String>) -> Vec<Vanity> {
+    let targets = Arc::new(Mutex::new(targets_.clone()));
+    let now = SystemTime::now();
+
+    let vector = par_do_find(wallet, end_index, targets_.clone(), |v| {
+        if targets.lock().unwrap().is_empty() {
+            return Err(());
+        } else {
+            targets.lock().unwrap().remove(&v.target);
+            return Ok(());
+        }
+    });
+
+    let time_elapsed = now.elapsed().unwrap();
+    let end_index_f32 = end_index as f32;
+    let speed = end_index_f32 / time_elapsed.as_secs_f32();
+    println!(
+        "✅ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
+        time_elapsed.as_millis(),
+        speed
+    );
+    return vector;
+}
+fn _par_find(wallet: Box<HDWallet>, end_index: u32, targets_csv: &str) -> Vec<Vanity> {
+    let targets_: std::collections::HashSet<String> = validating_split(targets_csv).unwrap();
+    __par_find(wallet, end_index, targets_)
+}
+
+pub fn par_find(input: BruteForceInput) -> Vec<Vanity> {
+    let wallet = HDWallet::from_entropy(input.int()).unwrap();
+    __par_find(Box::new(wallet), input.index_end(), input.targets)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn entropy() {
+        let wallet = HDWallet::from_entropy(U256::one());
+        assert_eq!(wallet.unwrap().entropy, U256::one());
+    }
+
+    #[test]
+    fn mnemonic() {
+        let wallet = HDWallet::from_entropy(U256::zero());
+        assert_eq!(wallet.unwrap().mnemonic_phrase(), "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
+    }
+
+    #[test]
+    fn test_key() {
+        let wallet = HDWallet::from_mnemonic_phrase(
+            "gentle hawk winner rain embrace erosion call update photo frost fatal wrestle",
+        )
+        .unwrap();
+        let key0 = wallet.derive_child(0);
+        assert_eq!(key0.path.to_string(), "m/44'/1022'/0'/0/0'");
+        // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L494
+        assert_eq!(
+            key0.public_key_hex().unwrap(),
+            "02f669a43024d90fde69351ccc53022c2f86708d9b3c42693640733c5778235da5"
+        );
+
+        assert_eq!(
+            key0.address_on_network(&NetworkDefinition::zabanet())
+                .unwrap(),
+            "account_tdx_e_169s2cfz044euhc4yjg4xe4pg55w97rq2c6jh50zsdcpuz5gk6cag6v"
+        );
+        let key1 = wallet.derive_child(1);
+        assert_eq!(key1.path.to_string(), "m/44'/1022'/0'/0/1'");
+        // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L542
+        assert_eq!(
+            key1.public_key_hex().unwrap(),
+            "023a41f437972033fa83c3c4df08dc7d68212ccac07396a29aca971ad5ba3c27c8"
+        );
+        assert_eq!(
+            key1.address_on_network(&NetworkDefinition::zabanet())
+                .unwrap(),
+            "account_tdx_e_16x88ghu9hd3hz4c9gumqjafrcwqtzk67wmpds7xg6uaz0kf42v5hju"
+        );
+    }
+
+    #[test]
+    fn find_vanity_suffix_xx_yy() {
+        let wallet = HDWallet::from_mnemonic_phrase(
+            "abandon abandon abandon top fire riot tonight attract gesture infant fringe vibrant",
+        )
+        .unwrap();
+
+        let vanities = _par_find(Box::new(wallet), 5000u32, "xx,yy");
+
+        assert_eq!(
+            vanities
+                .into_iter()
+                .map(|v| v.target)
+                .collect::<HashSet<String>>(),
+            HashSet::from(["xx", "yy"].map(|x| x.to_string()))
+        );
+    }
 }

@@ -12,16 +12,14 @@ use rad::{
 pub fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("benchmarking");
     group
-        .sample_size(1000)
+        .sample_size(10)
         .measurement_time(Duration::from_secs(200)); // target "xyz" takes ~150 sec on Macbook Pro M2
     group.bench_function("benchy", |b| {
         b.iter(|| {
             black_box(
                 // _find_one(input!("xyz").unwrap()),
                 par_find(
-                    1,
-                    input!("xyz").unwrap(),
-                    RunConfig::new(false, 0, false, false),
+                    input!("p").unwrap(), // RunConfig::new(false, 0, false, false),
                 ),
             )
         })

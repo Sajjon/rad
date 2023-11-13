@@ -11,7 +11,6 @@ use crate::{
 use std::time::Duration;
 
 use async_std::future;
-use futures::executor::block_on;
 
 default_args::default_args! {
     export pub fn crate::test_utils::input(
@@ -68,25 +67,4 @@ pub fn _find_one(input: BruteForceInput) -> Vanity {
 
 pub fn _find_n(n: usize, input: BruteForceInput) -> Vec<Vanity> {
     find_n(n, input, RunConfig::new(false, 0, false, false))
-}
-
-pub fn blocking_find_timeout_after(
-    take: usize,
-    input: BruteForceInput,
-    duration: Duration,
-) -> Vec<Vanity> {
-    block_on(future::timeout(
-        duration,
-        par_find(take, input, RunConfig::new(false, 0, false, false)),
-    ))
-    .expect("Should have found elements within timeout")
-}
-
-pub fn blocking_find(take: usize, input: BruteForceInput) -> Vec<Vanity> {
-    let duration = Duration::from_millis(1000);
-    blocking_find_timeout_after(take, input, duration)
-}
-
-pub fn blocking_find_one(input: BruteForceInput) -> Vanity {
-    blocking_find(1, input)[0].clone()
 }
