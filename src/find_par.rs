@@ -265,6 +265,7 @@ fn _par_find(wallet: Box<HDWallet>, end_index: u32, targets_csv: &str) -> Vec<Va
 }
 
 pub fn par_find(input: BruteForceInput) -> Vec<Vanity> {
+    println!("{}", input);
     let wallet = HDWallet::from_entropy(input.int()).unwrap();
     __par_find(Box::new(wallet), input.index_end(), input.targets)
 }
