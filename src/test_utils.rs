@@ -1,16 +1,8 @@
 extern crate default_args;
 use crate::{
     error::TargetSuffixError,
-    find_par::par_find,
-    find_serial_orig::{find_n_serial_orig, find_serial_orig},
     params::{Bip39WordCount, BruteForceInput},
-    run_config::RunConfig,
-    vanity::Vanity,
 };
-
-use std::time::Duration;
-
-use async_std::future;
 
 default_args::default_args! {
     export pub fn crate::test_utils::input(
@@ -46,25 +38,4 @@ default_args::default_args! {
             Option::Some(brute_force_seed)
         ).unwrap()
     }
-}
-
-pub fn _find<F>(input: BruteForceInput, on_result: F) -> ()
-where
-    F: FnMut(Vanity) -> bool,
-{
-    find_serial_orig(input, RunConfig::new(false, 0, false, false), on_result)
-}
-
-pub fn _find_one(input: BruteForceInput) -> Vanity {
-    let mut result: Option<Vanity> = Option::None;
-    _find(input, |v| {
-        result = Option::Some(v);
-        return false;
-    });
-
-    return result.expect("one result");
-}
-
-pub fn _find_n(n: usize, input: BruteForceInput) -> Vec<Vanity> {
-    find_n_serial_orig(n, input, RunConfig::new(false, 0, false, false))
 }

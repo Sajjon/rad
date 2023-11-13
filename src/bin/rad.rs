@@ -1,12 +1,7 @@
-use std::task::Poll;
-
 use clap::{Parser, Subcommand, ValueEnum};
-use futures::future::poll_fn;
-use futures::stream::StreamExt;
 use rad::file_reader::suffixes_from_file;
 use rad::find_par::par_find;
-use rad::find_serial_orig::{find_all_serial_orig, find_n_serial_orig, find_serial_orig};
-use rad::find_serial_wallet::{find_all_serial_wallet, find_n_serial_wallet, find_serial_wallet};
+use rad::find_serial::{find_all_serial, find_n_serial, find_serial};
 use rad::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
 use rad::params::{Bip39WordCount, BruteForceInput};
 use rad::run_config::RunConfig;
@@ -30,8 +25,9 @@ struct Cli {
     #[command(subcommand)]
     target_suffixes: TargetSuffixes,
 
-    #[arg(value_enum)]
-    mode: Mode,
+    /// If you wanna run serial (slow), instead of parallel
+    #[arg(short = 's', long, default_value_t = false)]
+    serial: bool,
 
     /// If we want to continue searching for more vanity accounts for a given
     /// target after we have found one. If `false` is passed, we will remove
@@ -63,18 +59,6 @@ struct Cli {
     end_index: u32,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum)]
-enum Mode {
-    /// Parallel
-    Par,
-
-    /// Serial original
-    SerOrig,
-
-    /// Serial wallet
-    SerWal,
-}
-
 #[derive(Debug, Subcommand)]
 enum TargetSuffixes {
     /// Read target suffixes from file, one target per line (without any delimitor).
@@ -86,53 +70,30 @@ enum TargetSuffixes {
     Targets { csv: String },
 }
 
-fn parallell(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
-    let result = par_find(input, run_config);
-    println!("✅ #{} results", result.len());
+fn parallell(
+    input: BruteForceInput,
+    run_config: RunConfig,
+    matches_per_mnemonic: usize,
+) -> Vec<Vanity> {
+    par_find(input, run_config)
 }
 
-fn serial(orig: bool, input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic: usize) {
-    let now = SystemTime::now();
-    let mut highest_index = 0;
+fn serial(
+    input: BruteForceInput,
+    run_config: RunConfig,
+    matches_per_mnemonic: usize,
+) -> Vec<Vanity> {
     match matches_per_mnemonic {
         0 => {
-            if orig {
-                find_serial_orig(input, run_config, |v| {
-                    if v.index > highest_index {
-                        highest_index = v.index
-                    }
-                    return true; // continue
-                });
-            } else {
-                find_serial_wallet(input, run_config, |v| {
-                    if v.index > highest_index {
-                        highest_index = v.index
-                    }
-                    return true; // continue
-                });
-            }
+            let mut vec: Vec<Vanity> = Vec::new();
+            find_serial(input, run_config, |v| {
+                vec.push(v);
+                return true; // continue
+            });
+            vec
         }
-        _ => {
-            if orig {
-                let mut vec = find_n_serial_orig(matches_per_mnemonic, input, run_config);
-                vec.sort_by(|l, r| l.index.cmp(&r.index));
-                highest_index = vec.first().unwrap().index;
-            } else {
-                let mut vec = find_n_serial_wallet(matches_per_mnemonic, input, run_config);
-                vec.sort_by(|l, r| l.index.cmp(&r.index));
-                highest_index = vec.first().unwrap().index;
-            }
-        }
-    };
-
-    let time_elapsed = now.elapsed().unwrap();
-    let highest_index_f32 = highest_index as f32;
-    let speed = highest_index_f32 / time_elapsed.as_secs_f32();
-    println!(
-        "✅ 🐌 Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
-        time_elapsed.as_millis(),
-        speed
-    );
+        _ => find_n_serial(matches_per_mnemonic, input, run_config),
+    }
 }
 
 fn main() {
@@ -154,23 +115,23 @@ fn main() {
 
     let run_config = RunConfig::new(true, cli.print_pulse, true, true);
     let matches_per_mnemonic = cli.matches_per_mnemonic;
-    // println!("{}", INFO_WITH_DONATION_QR);
+    println!("{}", INFO_WITH_DONATION_QR);
     let now = SystemTime::now();
-    match cli.mode {
-        Mode::Par => {
-            println!("🚀 Running in parallell for maximum speed");
-            parallell(input, run_config, matches_per_mnemonic);
-        }
-        Mode::SerOrig => {
-            println!("‼️ SERIAL orig 🙅🏻‍♀️");
-            serial(true, input, run_config, matches_per_mnemonic);
-        }
-        Mode::SerWal => {
-            println!("‼️ Serial WALLET");
-            serial(false, input, run_config, matches_per_mnemonic);
-        }
-    }
-
-    let elapsed = now.elapsed().unwrap();
-    println!("✅ Exiting program, ran for '{} sec'", elapsed.as_secs());
+    let mut vec = if cli.serial {
+        println!("🐌 Running serial... slower than parallel");
+        serial(input, run_config, matches_per_mnemonic)
+    } else {
+        println!("🚀 Running in parallell for maximum speed");
+        parallell(input, run_config, matches_per_mnemonic)
+    };
+    let time_elapsed = now.elapsed().unwrap();
+    vec.sort_by(|l, r| l.index.cmp(&r.index));
+    let highest_index = vec.first().unwrap().index;
+    let highest_index_f32 = highest_index as f32;
+    let speed = highest_index_f32 / time_elapsed.as_secs_f32();
+    println!(
+        "✅ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
+        time_elapsed.as_millis(),
+        speed
+    );
 }

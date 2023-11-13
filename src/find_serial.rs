@@ -1,20 +1,14 @@
-use crate::find_par::{vanity_from_childkey, HDWallet};
-use crate::info::INFO_DONATION_ADDR_ONLY;
-use crate::params::{BruteForceInput, MAX_SUFFIX_LENGTH};
+use crate::find_par::{cond_print, vanity_from_childkey, HDWallet};
+use crate::params::BruteForceInput;
 use crate::run_config::RunConfig;
-use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
 
 use ansi_escapes::EraseLines;
-use base64::{engine::general_purpose, Engine as _};
-use bip32::{ChildNumber, Seed, XPrv};
 use primitive_types::U256;
-use radix_engine_common::prelude::{
-    AddressBech32Encoder, ComponentAddress, NetworkDefinition, Secp256k1PublicKey,
-};
+
 use std::ops::AddAssign;
 
-pub fn find_serial_wallet<F>(input: BruteForceInput, run_config: RunConfig, mut on_result: F) -> ()
+pub fn find_serial<F>(input: BruteForceInput, run_config: RunConfig, mut on_result: F) -> ()
 where
     F: FnMut(Vanity) -> bool,
 {
@@ -48,16 +42,8 @@ where
                     let result = vanity_from_childkey(&child, target, &wallet);
                     attempts_since_last_find = U256::zero();
 
-                    if run_config.print_found_vanity_result {
-                        // println!(
-                        //     "{}\n{}{}\n{}",
-                        //     "🎯".repeat(40),
-                        //     result.to_string(),
-                        //     INFO_DONATION_ADDR_ONLY.to_string(),
-                        //     "🎯".repeat(40),
-                        // );
-                        println!("{}", result.to_string());
-                    }
+                    cond_print(&result, &run_config);
+
                     if !on_result(result) {
                         done = true;
                     }
@@ -91,20 +77,16 @@ where
     }
 }
 
-pub fn find_all_serial_wallet(input: BruteForceInput, run_config: RunConfig) -> () {
-    find_serial_wallet(input, run_config, |_| {
+pub fn find_all_serial(input: BruteForceInput, run_config: RunConfig) -> () {
+    find_serial(input, run_config, |_| {
         return true; // continue
     });
 }
 
-pub fn find_n_serial_wallet(
-    n: usize,
-    input: BruteForceInput,
-    run_config: RunConfig,
-) -> Vec<Vanity> {
+pub fn find_n_serial(n: usize, input: BruteForceInput, run_config: RunConfig) -> Vec<Vanity> {
     let mut results: Vec<Vanity> = Vec::new();
 
-    find_serial_wallet(input, run_config, |v| {
+    find_serial(input, run_config, |v| {
         results.push(v);
         if results.len() == n {
             return false;

@@ -12,7 +12,6 @@ use radix_engine_common::prelude::{
 };
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
-use std::time::SystemTime;
 
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use thiserror::Error;
@@ -65,6 +64,8 @@ pub struct HDWallet {
     pub mnemonic_phrase: String,
 }
 
+pub const BASE_PATH: &str = "m/44'/1022'/0'/0";
+
 impl HDWallet {
     pub fn fingerprint(&self) -> String {
         general_purpose::STANDARD_NO_PAD.encode(&self.seed.as_bytes()[56..])
@@ -73,8 +74,7 @@ impl HDWallet {
     fn new(entropy: U256, mnemonic: Mnemonic) -> Result<Self, RunError> {
         let seed = Seed::new(mnemonic.to_seed("")); // bip32 create
 
-        let intermediary_path_ = "m/44'/1022'/0'/0";
-        let intermediary_path = intermediary_path_
+        let intermediary_path = BASE_PATH
             .parse()
             .map_err(|_| RunError::ParseDerivationPath)?;
         let key = XPrv::derive_from_path(&seed, &intermediary_path)
@@ -151,6 +151,21 @@ impl HDWallet {
     }
 }
 
+pub fn cond_print(vanity: &Vanity, run_config: &RunConfig) {
+    if run_config.print_found_vanity_result {
+        print_vanity(vanity);
+    }
+}
+pub fn print_vanity(vanity: &Vanity) {
+    println!(
+        "{}\n{}{}\n{}",
+        "🎯".repeat(40),
+        vanity.to_string(),
+        INFO_DONATION_ADDR_ONLY.to_string(),
+        "🎯".repeat(40),
+    );
+}
+
 pub fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -> Vanity {
     Vanity {
         target: target.to_string(),
@@ -206,19 +221,8 @@ fn par_do_find(
             for target in trgts.iter() {
                 if suff.ends_with(target) {
                     let vanity = vanity_from_childkey(&c, target, &wallet);
-                    if run_config.print_found_vanity_result {
-                        // println!(
-                        //     "{}\n{}{}\n{}",
-                        //     "🎯".repeat(40),
-                        //     vanity.to_string(),
-                        //     INFO_DONATION_ADDR_ONLY.to_string(),
-                        //     "🎯".repeat(40),
-                        // );
-                        println!("{}", vanity.to_string());
-                    }
-
+                    cond_print(&vanity, &run_config);
                     result = Some(vanity);
-
                     break;
                 } else {
                     continue;
@@ -232,40 +236,14 @@ fn par_do_find(
     )
 }
 
-fn __par_find(
+fn _par_find(
     run_config: RunConfig,
     wallet: Box<HDWallet>,
     end_index: u32,
     targets_: HashSet<String>,
 ) -> Vec<Vanity> {
     let targets = Arc::new(Mutex::new(targets_.clone()));
-    let now = SystemTime::now();
-
-    let mut vector = par_do_find(run_config.clone(), wallet, end_index, targets);
-
-    let time_elapsed = now.elapsed().unwrap();
-    // let end_index_f32 = end_index as f32;
-    vector.sort_by(|l, r| l.index.cmp(&r.index));
-    if run_config.print_input {
-        let highest_index = vector.first().unwrap().index;
-        let highest_index_f32 = highest_index as f32;
-        let speed = highest_index_f32 / time_elapsed.as_secs_f32();
-        println!(
-            "✅ ⚡️ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
-            time_elapsed.as_millis(),
-            speed
-        );
-    }
-    return vector;
-}
-fn _par_find(
-    run_config: RunConfig,
-    wallet: Box<HDWallet>,
-    end_index: u32,
-    targets_csv: &str,
-) -> Vec<Vanity> {
-    let targets_: std::collections::HashSet<String> = validating_split(targets_csv).unwrap();
-    __par_find(run_config, wallet, end_index, targets_)
+    par_do_find(run_config.clone(), wallet, end_index, targets)
 }
 
 pub fn par_find(input: BruteForceInput, run_config: RunConfig) -> Vec<Vanity> {
@@ -273,7 +251,7 @@ pub fn par_find(input: BruteForceInput, run_config: RunConfig) -> Vec<Vanity> {
         println!("{}", input);
     }
     let wallet = HDWallet::from_entropy(input.int()).unwrap();
-    __par_find(
+    _par_find(
         run_config,
         Box::new(wallet),
         input.index_end(),
@@ -303,7 +281,7 @@ mod tests {
         )
         .unwrap();
         let key0 = wallet.derive_child(0);
-        assert_eq!(key0.path.to_string(), "m/44'/1022'/0'/0/0'");
+        assert_eq!(key0.index, 0);
         // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L494
         assert_eq!(
             hex::encode(key0.public_key_bytes),
@@ -311,7 +289,7 @@ mod tests {
         );
 
         let key1 = wallet.derive_child(1);
-        assert_eq!(key1.path.to_string(), "m/44'/1022'/0'/0/1'");
+        assert_eq!(key1.index, 1);
         // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L542
         assert_eq!(
             hex::encode(key1.public_key_bytes),
@@ -327,7 +305,8 @@ mod tests {
         .unwrap();
 
         let run_config = RunConfig::new(false, 0, false, false);
-        let vanities = _par_find(run_config, Box::new(wallet), 5000u32, "xx,yy");
+        let targets = validating_split("xx,yy").unwrap();
+        let vanities = _par_find(run_config, Box::new(wallet), 5000u32, targets);
 
         assert_eq!(
             vanities
