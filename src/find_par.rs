@@ -1,4 +1,4 @@
-use crate::hdwallet::{HDWallet, ChildKey, vanity_from_childkey};
+use crate::hdwallet::{vanity_from_childkey, ChildKey, HDWallet};
 use crate::info::INFO_DONATION_ADDR_ONLY;
 use crate::params::BruteForceInput;
 use crate::run_config::RunConfig;
@@ -9,7 +9,6 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-
 
 pub fn cond_print(vanity: &Vanity, run_config: &RunConfig) {
     if run_config.print_found_vanity_result {
@@ -26,27 +25,21 @@ pub fn print_vanity(vanity: &Vanity) {
     );
 }
 
-
 fn par_do_do_find<E, F>(
     range: Range<u32>,
     wallet: &Box<HDWallet>,
-    check_stop: E,
+    check_if_done: E,
     on_childkey: F,
 ) -> Vec<Vanity>
 where
-    E: Fn() -> bool + Send + Sync,
+    E: Fn(u32) -> Option<u32> + Send + Sync,
     F: Fn(ChildKey) -> Option<Vanity> + Send + Sync,
 {
     range
         .into_par_iter()
-        .map(|i| {
-            if check_stop() {
-                None
-            } else {
-                Some(wallet.derive_child(i))
-            }
-        })
+        .map(|i| check_if_done(i))
         .while_some()
+        .map(|i| wallet.derive_child(i))
         .map(|c| on_childkey(c))
         .filter_map(|x| x)
         .collect()
@@ -61,7 +54,13 @@ fn par_do_find(
     par_do_do_find(
         0..end_index,
         &wallet,
-        || targets.lock().unwrap().is_empty(),
+        |i| {
+            if targets.lock().unwrap().is_empty() {
+                None
+            } else {
+                Some(i)
+            }
+        },
         |c| {
             let suff = c.suffix.clone();
 
