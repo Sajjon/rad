@@ -153,7 +153,7 @@ impl ChildKey {
 }
 
 impl HDWallet {
-    fn derive_child(&self, index: u32) -> ChildKey {
+    pub fn derive_child(&self, index: u32) -> ChildKey {
         let path = self.intermediary_key.path.child(index);
 
         let key = XPrv::derive_from_path(&self.seed(), &path.derivation_path).expect("hd key");
@@ -162,7 +162,7 @@ impl HDWallet {
     }
 }
 
-fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -> Vanity {
+pub fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -> Vanity {
     Vanity {
         target: target.to_string(),
         address: child_key.address().unwrap(),
