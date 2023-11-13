@@ -1,11 +1,16 @@
 #[cfg(test)]
 mod tests {
 
+    use std::collections::HashSet;
+
+    use primitive_types::U256;
     use rad::{
         error::TargetSuffixError,
-        input, input_deterministic,
+        find_par::par_find,
+        hdwallet::HDWallet,
+        input,
         params::{Bip39WordCount, MAX_INDEX},
-        test_utils::{_find_n, _find_one},
+        run_config::RunConfig,
     };
 
     #[test]
@@ -88,129 +93,53 @@ mod tests {
     }
 
     #[test]
-    fn x() {
-        let input = input_deterministic!("x");
-        let non_par = _find_one(input.clone());
-        let par = blocking_find_one(input);
-        assert_eq!(non_par.target, par.target);
+    fn entropy() {
+        let wallet = HDWallet::from_entropy(U256::one());
+        assert_eq!(wallet.unwrap().entropy, U256::one());
     }
 
     #[test]
-    fn xyz() {
-        let result = _find_one(input_deterministic!("xyz"));
-        assert_eq!(result.index, 178012);
+    fn mnemonic() {
+        let wallet = HDWallet::from_entropy(U256::zero());
+        assert_eq!(wallet.unwrap().mnemonic_phrase, "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about");
     }
 
     #[test]
-    fn target_2345() {
-        let result = _find_one(input_deterministic!("2345"));
-        assert_eq!(result.index, 597472);
-    }
+    fn test_key() {
+        let wallet = HDWallet::from_mnemonic_phrase(
+            "gentle hawk winner rain embrace erosion call update photo frost fatal wrestle",
+        )
+        .unwrap();
+        let key0 = wallet.derive_child(0);
+        assert_eq!(key0.index, 0);
+        // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L494
+        assert_eq!(
+            hex::encode(key0.public_key_bytes),
+            "02f669a43024d90fde69351ccc53022c2f86708d9b3c42693640733c5778235da5"
+        );
 
-    #[test]
-    fn one() {
-        let result = _find_one(input_deterministic!("9"));
-        assert_eq!(result.target, "9");
+        let key1 = wallet.derive_child(1);
+        assert_eq!(key1.index, 1);
+        // https://github.com/radixdlt/babylon-wallet-ios/blob/40c7b8d671611ca7a8ba52e0b5e82044d9cebd68/RadixWalletTests/ProfileTests/TestVectors/ProfileVersion100/multi_profile_snapshots_test_version_100.json#L542
         assert_eq!(
-            result.mnemonic,
-            "abandon abandon abandon top fire riot tonight attract gesture infant fringe vibrant"
-        );
-        assert_eq!(
-            result.address,
-            "account_rdx16xx7xu4mel6nae8kphnfsnh2qp24j658huglyamy35u8djmfwxc0a9"
-        );
-        assert_eq!(result.bip39_seed_fingerprint, "g1E2tnS4bUc");
-        assert_eq!(
-            result.cap33_export_string_account_part(),
-            "S^A7YA0KWtH020Y7skhc2IGszGSi+fp8ROHNKev7mtmkx5^12^g1E2tnS4bUc|9|12}"
-        );
-        assert_eq!(result.derivation_path, "m/44'/1022'/0'/0/12'");
-        assert_eq!(
-            result.public_key_hex(),
-            "03b600d0a5ad1f4db463bb2485cd881accc64a2f9fa7c44e1cd29ebfb9ad9a4c79"
-        );
-        assert_eq!(
-            result.cap33_export_string(),
-            "1^0^12]S^A7YA0KWtH020Y7skhc2IGszGSi+fp8ROHNKev7mtmkx5^12^g1E2tnS4bUc|9|12}"
+            hex::encode(key1.public_key_bytes),
+            "023a41f437972033fa83c3c4df08dc7d68212ccac07396a29aca971ad5ba3c27c8"
         );
     }
 
     #[test]
-    fn n_3_find_multiple_accounts_per_target() {
-        let n: usize = 3;
-        let tx: &str = "tx";
-        let ty = "ty";
-        let find_multiple_accounts_per_target = true;
-        let results = _find_n(
-            n,
-            input_deterministic!(
-                &format!("{tx},{ty}"),
-                MAX_INDEX,
-                find_multiple_accounts_per_target
-            ),
+    fn find_vanity_suffix_xx_yy() {
+        let run_config = RunConfig::new(false, 0, false, false);
+        let vec = par_find(
+            input!("xx,yy").unwrap(),
+            RunConfig::new(false, 0, false, false),
         );
 
-        assert_eq!(results.len(), n);
-
         assert_eq!(
-            results
-                .into_iter()
+            vec.into_iter()
                 .map(|v| v.target)
-                .collect::<Vec<String>>(),
-            Vec::from([tx, ty, ty])
+                .collect::<HashSet<String>>(),
+            HashSet::from(["xx", "yy"].map(|x| x.to_string()))
         );
     }
-
-    #[test]
-    fn n_3_find_single_accounts_per_target() {
-        let n: usize = 3;
-        let tx: &str = "tx";
-        let ty = "ty";
-        let targets = [tx, ty];
-        let find_multiple_accounts_per_target = false;
-        let results = _find_n(
-            n,
-            input_deterministic!(
-                &targets.join(","),
-                MAX_INDEX,
-                find_multiple_accounts_per_target
-            ),
-        );
-
-        assert_eq!(results.len(), targets.len()); // not `n`,
-
-        assert_eq!(
-            results
-                .into_iter()
-                .map(|v| v.target)
-                .collect::<Vec<String>>(),
-            targets
-        );
-    }
-
-    #[test]
-    fn xrd() {
-        assert_eq!(
-            _find_one(input_deterministic!("xrd")).address,
-            "account_rdx16xl72qyxvhkjtmyxeazl4tcgjh5n3hse6xfnr3ku0utlk9myp47xrd"
-        );
-    }
-
-    #[test]
-    fn speed() {
-        assert_eq!(
-            _find_one(input_deterministic!("xrd")).address,
-            "account_rdx16xl72qyxvhkjtmyxeazl4tcgjh5n3hse6xfnr3ku0utlk9myp47xrd"
-        );
-    }
-
-    // #[bench]
-    // fn deterministic(b: &mut Bencher) {
-    //     b.iter(|| {
-    //         assert_eq!(
-    //             find_one(input_deterministic!("a")).address,
-    //             "account_rdx16xcsekplyt3cvqdqntcz37zgt8wageuznmgthfzkfrj8ye5ay5k7xa"
-    //         );
-    //     });
-    // }
 }
