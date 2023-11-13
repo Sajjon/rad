@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
 use rad::file_reader::suffixes_from_file;
-use rad::find::{find_all, find_n};
+use rad::find_par::par_find;
 use rad::info::{INFO_DONATION_ADDR_ONLY, INFO_WITH_DONATION_QR};
 use rad::params::{Bip39WordCount, BruteForceInput};
 use rad::run_config::RunConfig;
+use std::time::SystemTime;
 
 #[derive(Parser)]
 #[command(name = "rad", version)]
@@ -21,29 +22,6 @@ struct Cli {
     /// Input for which target suffixes to look for, either file or csv passed in as a string.
     #[command(subcommand)]
     target_suffixes: TargetSuffixes,
-
-    /// If we want to continue searching for more vanity accounts for a given
-    /// target after we have found one. If `false` is passed, we will remove
-    /// the target after first account is found (better performance). If `true`,
-    /// the program will find multiple matches per target.
-    #[arg(short = 'c', long, default_value_t = false)]
-    multi_match_per_target: bool,
-
-    /// How many matches PER MMEMONIC we will search for until program exits,
-    /// `0` means run forver. Any other value means stop program after than
-    /// many vanity accounts have been found.
-    #[arg(short = 'n', long, default_value_t = 0)]
-    matches_per_mnemonic: usize,
-
-    /// How often you want the program to print any progress, use `0` to not print any progress.
-    /// Since finding accounts can take a very long time if 6 character long targets are used
-    /// it can be nice to see some kind of progress, you typicall want this to be a high number
-    /// like 10k - 1M, depending on how fast your machine is.
-    ///
-    /// If you are piping the output to a pager, e.g. `less` you typicall want to specify `0` to
-    /// this argument, so not have to scroll meaningless progress prints.
-    #[arg(short = 'p', long = "pulse", default_value_t = 10000)]
-    print_pulse: u32,
 
     /// The number of indices to test per mnemonic,
     /// is used, which is convenient if you find a lot of nice vanity account using the same
@@ -74,20 +52,20 @@ fn main() {
     let input = BruteForceInput::new_splitting_targets(
         &csv_string,
         cli.end_index,
-        cli.multi_match_per_target,
+        true,
         Bip39WordCount::Twelve,
-        Option::None,
+        None,
     )
     .expect("Valid input");
 
-    let run_config = RunConfig::new(cli.print_pulse);
-    let matches_per_mnemonic = cli.matches_per_mnemonic;
+    let run_config = RunConfig::new(true, 0, true, true);
     println!("{}", INFO_WITH_DONATION_QR);
-    match matches_per_mnemonic {
-        0 => find_all(input, run_config),
-        _ => {
-            find_n(cli.matches_per_mnemonic, input, run_config);
-            ()
-        }
-    }
+    let now = SystemTime::now();
+    let vec = par_find(input, run_config);
+    let time_elapsed = now.elapsed().unwrap();
+    println!(
+        "✅ Exiting program, ran for '{}' ms, found #{} results",
+        time_elapsed.as_millis(),
+        vec.len()
+    );
 }

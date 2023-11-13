@@ -1,10 +1,11 @@
+use std::collections::HashSet;
+
 use crate::error::TargetSuffixError;
 use primitive_types::{U128, U256};
 use rand::Rng;
-use std::collections::HashSet;
 use unindent::unindent;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Bip39WordCount {
     Twelve,
     #[allow(dead_code)]
@@ -19,14 +20,14 @@ impl Bip39WordCount {
     }
     pub fn max_int(&self) -> U256 {
         match self {
-            Self::Twelve => U256::from(U128::MAX), //BigUint::from_bytes_be(&[0xffu8; 16]),
+            Self::Twelve => U256::from(U128::MAX),
             Self::TwentyFour => U256::MAX,
         }
     }
 }
 
 /// Parameters use to control how and which vanity accounts are found.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct BruteForceInput {
     /// The target suffixes to search for, must be validated before set.
     pub targets: HashSet<String>,

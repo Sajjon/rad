@@ -10,3 +10,4 @@ pub fn mnemonic_from_u256(u: &U256, word_count: &Bip39WordCount) -> Mnemonic {
     vec.drain(0..vec.len() - word_count.byte_count());
     return Mnemonic::from_entropy(&vec).unwrap();
 }
+

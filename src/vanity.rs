@@ -5,10 +5,14 @@ use nu_ansi_term::{
 use base64::{engine::general_purpose, Engine as _};
 use qrencode::{render::unicode, QrCode};
 
+use crate::hdwallet::BASE_PATH;
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Vanity {
     pub target: String,
     pub address: String,
-    pub derivation_path: String,
+    /// Last 6 chars of the address, stored property for higher performance, used to check match against `target`.
+    pub address_suffix: String,
     pub index: u32,
     pub public_key_bytes: Vec<u8>,
     pub mnemonic: String,
@@ -20,6 +24,9 @@ pub struct Vanity {
 }
 
 impl Vanity {
+    pub fn derivation_path(&self) -> String {
+        format!("{}/{}'", BASE_PATH, self.index)
+    }
     pub fn public_key_hex(&self) -> String {
         hex::encode(&self.public_key_bytes)
     }
@@ -85,7 +92,7 @@ impl std::fmt::Display for Vanity {
         write!(
             f,
             "Address: {} (🎯 '{}')\nPath: {}\nPublicKey: {}\nIn Babylon mobile app: 'Import from a Legacy Wallet', by scanning:\n{}\n{}",
-            self.address, self.target, self.derivation_path, self.public_key_hex(), self.cap33_qr_code_string(), self.mnemonic_phrase_grid_string()
+            self.address, self.target, self.derivation_path(), self.public_key_hex(), self.cap33_qr_code_string(), self.mnemonic_phrase_grid_string()
         )
     }
 }
