@@ -18,9 +18,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
         b.iter(|| {
             black_box(
                 // _find_one(input!("xyz").unwrap()),
-                par_find(
-                    input!("p").unwrap(), // RunConfig::new(false, 0, false, false),
-                ),
+                par_find(input!("p").unwrap(), RunConfig::new(false, 0, false, false)),
             )
         })
     });

@@ -3,6 +3,7 @@ use primitive_types::U256;
 /// Configuration controlling how program is run, but not
 /// relating to which vanity accounts are found, just how
 /// program executes.
+#[derive(Clone)]
 pub struct RunConfig {
     pub print_found_vanity_result: bool,
     /// `0` means don't print anything

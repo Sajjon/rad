@@ -88,7 +88,7 @@ fn parallell(input: BruteForceInput, run_config: RunConfig, matches_per_mnemonic
     //         par_find(matches_per_mnemonic, input, run_config).await
     //     }
     // };
-    let result = par_find(input);
+    let result = par_find(input, run_config);
     println!("✅ #{} results", result.len());
 }
 

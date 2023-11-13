@@ -1,5 +1,6 @@
 use crate::info::INFO_DONATION_ADDR_ONLY;
 use crate::params::{validating_split, Bip39WordCount, BruteForceInput, MAX_SUFFIX_LENGTH};
+use crate::run_config::{self, RunConfig};
 use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
 use base64::{engine::general_purpose, Engine as _};
@@ -201,6 +202,7 @@ where
 }
 
 fn par_do_find(
+    run_config: RunConfig,
     wallet: Box<HDWallet>,
     end_index: u32,
     targets: Arc<Mutex<HashSet<String>>>,
@@ -217,13 +219,15 @@ fn par_do_find(
             for target in trgts.iter() {
                 if suff.ends_with(target) {
                     let vanity = vanity_from_childkey(&c, target, &wallet);
-                    println!(
-                        "{}\n{}{}\n{}",
-                        "🎯".repeat(40),
-                        vanity.to_string(),
-                        INFO_DONATION_ADDR_ONLY.to_string(),
-                        "🎯".repeat(40),
-                    );
+                    if run_config.print_found_vanity_result {
+                        println!(
+                            "{}\n{}{}\n{}",
+                            "🎯".repeat(40),
+                            vanity.to_string(),
+                            INFO_DONATION_ADDR_ONLY.to_string(),
+                            "🎯".repeat(40),
+                        );
+                    }
 
                     result = Some(vanity);
 
@@ -240,34 +244,53 @@ fn par_do_find(
     )
 }
 
-fn __par_find(wallet: Box<HDWallet>, end_index: u32, targets_: HashSet<String>) -> Vec<Vanity> {
+fn __par_find(
+    run_config: RunConfig,
+    wallet: Box<HDWallet>,
+    end_index: u32,
+    targets_: HashSet<String>,
+) -> Vec<Vanity> {
     let targets = Arc::new(Mutex::new(targets_.clone()));
     let now = SystemTime::now();
 
-    let mut vector = par_do_find(wallet, end_index, targets);
+    let mut vector = par_do_find(run_config.clone(), wallet, end_index, targets);
 
     let time_elapsed = now.elapsed().unwrap();
     // let end_index_f32 = end_index as f32;
     vector.sort_by(|l, r| l.index.cmp(&r.index));
-    let highest_index = vector.first().unwrap().index;
-    let highest_index_f32 = highest_index as f32;
-    let speed = highest_index_f32 / time_elapsed.as_secs_f32();
-    println!(
-        "✅ ⚡️ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
-        time_elapsed.as_millis(),
-        speed
-    );
+    if run_config.print_input {
+        let highest_index = vector.first().unwrap().index;
+        let highest_index_f32 = highest_index as f32;
+        let speed = highest_index_f32 / time_elapsed.as_secs_f32();
+        println!(
+            "✅ ⚡️ Exiting program, ran for '{}' ms, speed: '#{}' iters per second.",
+            time_elapsed.as_millis(),
+            speed
+        );
+    }
     return vector;
 }
-fn _par_find(wallet: Box<HDWallet>, end_index: u32, targets_csv: &str) -> Vec<Vanity> {
+fn _par_find(
+    run_config: RunConfig,
+    wallet: Box<HDWallet>,
+    end_index: u32,
+    targets_csv: &str,
+) -> Vec<Vanity> {
     let targets_: std::collections::HashSet<String> = validating_split(targets_csv).unwrap();
-    __par_find(wallet, end_index, targets_)
+    __par_find(run_config, wallet, end_index, targets_)
 }
 
-pub fn par_find(input: BruteForceInput) -> Vec<Vanity> {
-    println!("{}", input);
+pub fn par_find(input: BruteForceInput, run_config: RunConfig) -> Vec<Vanity> {
+    if run_config.print_input {
+        println!("{}", input);
+    }
     let wallet = HDWallet::from_entropy(input.int()).unwrap();
-    __par_find(Box::new(wallet), input.index_end(), input.targets)
+    __par_find(
+        run_config,
+        Box::new(wallet),
+        input.index_end(),
+        input.targets,
+    )
 }
 
 #[cfg(test)]
@@ -325,7 +348,8 @@ mod tests {
         )
         .unwrap();
 
-        let vanities = _par_find(Box::new(wallet), 5000u32, "xx,yy");
+        let run_config = RunConfig::new(false, 0, false, false);
+        let vanities = _par_find(run_config, Box::new(wallet), 5000u32, "xx,yy");
 
         assert_eq!(
             vanities
