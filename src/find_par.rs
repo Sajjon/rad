@@ -9,24 +9,24 @@ use std::sync::{Arc, Mutex};
 
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-fn parallel_search<Proto, Match, Invariant, MakeProto, EvalProto>(
+fn parallel_search<NeedleTip, Needle, Invariant, NeedleTipFrom, NeedlesFromTip>(
     range: Range<u32>,
     loop_invariant: Invariant,
-    make_proto: MakeProto,
-    eval_proto: EvalProto,
-) -> Vec<Match>
+    needle_tip_from: NeedleTipFrom,
+    needles_from_tip: NeedlesFromTip,
+) -> Vec<Needle>
 where
-    Invariant: Fn() -> bool + Sync,
-    MakeProto: Fn(u32) -> Proto + Sync,
-    EvalProto: Fn(Proto) -> Vec<Match> + Sync,
-    Proto: Send,
-    Match: Send,
+    Invariant: Fn(&u32) -> bool + Sync + Send,
+    NeedleTipFrom: Fn(u32) -> NeedleTip + Sync + Send,
+    NeedlesFromTip: Fn(NeedleTip) -> Vec<Needle> + Sync + Send,
+    NeedleTip: Send,
+    Needle: Send,
 {
     range
         .into_par_iter()
-        .take_any_while(|_| loop_invariant())
-        .map(|i| make_proto(i))
-        .flat_map(|c| eval_proto(c))
+        .take_any_while(loop_invariant)
+        .map(needle_tip_from)
+        .flat_map(needles_from_tip)
         .collect()
 }
 
@@ -38,7 +38,7 @@ fn parallel_search_addresses(
 ) -> Vec<Vanity> {
     parallel_search(
         0..end_index,
-        || !targets.lock().unwrap().is_empty(),
+        |_| !targets.lock().unwrap().is_empty(),
         |i| wallet.derive_child(i),
         |c| {
             let suff = c.suffix.clone();
