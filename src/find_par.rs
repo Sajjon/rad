@@ -1,6 +1,7 @@
 use crate::hdwallet::{vanity_from_childkey, ChildKey, HDWallet};
 use crate::params::BruteForceInput;
 use crate::run_config::RunConfig;
+use crate::utils::remove;
 use crate::vanity::*;
 
 use std::collections::HashSet;
@@ -46,7 +47,7 @@ where
         |_| !targets.lock().unwrap().is_empty(),
         derive_child,
         |c| {
-            let mut targets = targets.lock().unwrap();
+            let targets = targets.lock().unwrap();
             let mut matches = Vec::<Vanity>::new();
             for target in targets.iter() {
                 if c.suffix.ends_with(target) {
@@ -55,7 +56,7 @@ where
                     matches.push(vanity);
                 }
             }
-            (*targets).retain(|x| matches.iter().all(|v| x != &v.target));
+            remove(&matches, targets, |v, t| &v.target != t);
             return matches;
         },
     )
