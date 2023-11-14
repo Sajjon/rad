@@ -10,14 +10,20 @@ use std::sync::{Arc, Mutex};
 
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-fn parallel_search<NeedleTip, Needle, Invariant, NeedleTipFrom, NeedlesFromTip>(
+/// In parallel searches for needles in a haystack, until haystack is empty
+/// 
+/// When all needles have been found, `take_while` returns false, thus stopping iteration.
+/// 
+/// Needles are created from "needle tips", potential candidates for a needle, and needle
+/// tips are created for every iteration from a `u32`.
+fn parallel_search<NeedleTip, Needle, TakeWhile, NeedleTipFrom, NeedlesFromTip>(
     range: Range<u32>,
-    loop_invariant: Invariant,
+    take_while: TakeWhile,
     needle_tip_from: NeedleTipFrom,
     needles_from_tip: NeedlesFromTip,
 ) -> Vec<Needle>
 where
-    Invariant: Fn(&u32) -> bool + Sync + Send,
+    TakeWhile: Fn(&u32) -> bool + Sync + Send,
     NeedleTipFrom: Fn(u32) -> NeedleTip + Sync + Send,
     NeedlesFromTip: Fn(NeedleTip) -> Vec<Needle> + Sync + Send,
     NeedleTip: Send,
@@ -25,7 +31,7 @@ where
 {
     range
         .into_par_iter()
-        .take_any_while(loop_invariant)
+        .take_any_while(take_while)
         .map(needle_tip_from)
         .flat_map(needles_from_tip)
         .collect()
