@@ -46,11 +46,10 @@ where
         |_| !targets.lock().unwrap().is_empty(),
         derive_child,
         |c| {
-            let suff = c.suffix.clone();
             let mut targets = targets.lock().unwrap();
             let mut matches = Vec::<Vanity>::new();
             for target in targets.iter() {
-                if suff.ends_with(target) {
+                if c.suffix.ends_with(target) {
                     let vanity = vanity_from_matching_child(&c, target);
                     cond_print(&vanity, &run_config);
                     matches.push(vanity);
