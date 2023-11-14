@@ -3,37 +3,17 @@ use crate::run_error::RunError;
 use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
 use base64::{engine::general_purpose, Engine as _};
-use bip32::{ChildNumber, DerivationPath, Seed, XPrv};
+use bip32::{ChildNumber, Seed, XPrv};
 use bip39::Mnemonic;
 use primitive_types::U256;
 use radix_engine_common::prelude::{
     AddressBech32Encoder, ComponentAddress, NetworkDefinition, Secp256k1PublicKey,
 };
 
-#[derive(Clone)]
-pub struct Path {
-    pub index: u32,
-    pub derivation_path: DerivationPath,
-}
-impl Path {
-    pub fn to_string(&self) -> String {
-        self.derivation_path.to_string()
-    }
-    pub fn child(&self, index: u32) -> Self {
-        Self {
-            index,
-            derivation_path: format!("{}/{}'", self.derivation_path.to_string(), index)
-                .parse()
-                .unwrap(),
-        }
-    }
-}
-
 pub struct HDWallet {
     pub entropy: U256,
     pub mnemonic: Mnemonic,
     pub intermediary_key_priv: XPrv,
-    pub intermediary_key_path: Path,
     pub seed: Seed,
     pub mnemonic_phrase: String,
 }
@@ -55,17 +35,11 @@ impl HDWallet {
         let key = XPrv::derive_from_path(&seed, &intermediary_path)
             .map_err(|_| RunError::DeriveChildKeyFromPath)?;
 
-        let path = Path {
-            index: 0,
-            derivation_path: intermediary_path,
-        };
-
         Ok(Self {
             entropy,
             mnemonic: mnemonic.clone(),
             seed,
             intermediary_key_priv: key,
-            intermediary_key_path: path,
             mnemonic_phrase: mnemonic.to_string(),
         })
     }
