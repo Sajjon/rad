@@ -16,7 +16,7 @@ fn parallel_search<Proto, Match, Invariant, MakeProto, EvalProto>(
     eval_proto: EvalProto,
 ) -> Vec<Match>
 where
-    Invariant: Fn(u32) -> Option<u32> + Sync,
+    Invariant: Fn() -> bool + Sync,
     MakeProto: Fn(u32) -> Proto + Sync,
     EvalProto: Fn(Proto) -> Vec<Match> + Sync,
     Proto: Send,
@@ -24,8 +24,7 @@ where
 {
     range
         .into_par_iter()
-        .map(|i| loop_invariant(i))
-        .while_some()
+        .take_any_while(|_| loop_invariant())
         .map(|i| make_proto(i))
         .flat_map(|c| eval_proto(c))
         .collect()
@@ -39,17 +38,10 @@ fn parallel_search_addresses(
 ) -> Vec<Vanity> {
     parallel_search(
         0..end_index,
-        |i| {
-            if targets.lock().unwrap().is_empty() {
-                None
-            } else {
-                Some(i)
-            }
-        },
+        || !targets.lock().unwrap().is_empty(),
         |i| wallet.derive_child(i),
         |c| {
             let suff = c.suffix.clone();
-
             let mut targets = targets.lock().unwrap();
             let mut matches = Vec::<Vanity>::new();
             for target in targets.iter() {
@@ -67,7 +59,7 @@ fn parallel_search_addresses(
 
 pub fn par_find(input: BruteForceInput, run_config: RunConfig) -> Vec<Vanity> {
     if run_config.print_input {
-        println!("{}", input);
+        println!("{input}");
     }
     let wallet = HDWallet::from_entropy(input.clone().int()).unwrap();
     let targets = Arc::new(Mutex::new(input.clone().targets));
