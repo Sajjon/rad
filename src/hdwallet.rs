@@ -51,11 +51,11 @@ impl HDWallet {
         let intermediary_path = BASE_PATH
             .parse()
             .map_err(|_| RunError::ParseDerivationPath)?;
-      
+
         let key = XPrv::derive_from_path(&seed, &intermediary_path)
             .map_err(|_| RunError::DeriveChildKeyFromPath)?;
 
-            let path = Path {
+        let path = Path {
             index: 0,
             derivation_path: intermediary_path,
         };
@@ -94,10 +94,17 @@ pub struct ChildKey {
     pub suffix: String,
 }
 
+fn address_from_public_key(slice: &[u8]) -> String {
+    let re_secp256k1_pubkey = Secp256k1PublicKey::try_from(slice).expect("RE secp256k1 pubkey");
+    let address_data = ComponentAddress::virtual_account_from_public_key(&re_secp256k1_pubkey);
+    let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
+    address_encoder
+        .encode(&address_data.to_vec()[..])
+        .expect("bech32 account address")
+}
+
 impl HDWallet {
     pub fn derive_child(&self, index: u32) -> ChildKey {
-        // let path = self.intermediary_key_path.child(index);
-
         let child_xprv = self
             .intermediary_key_priv
             .derive_child(ChildNumber::new(index, true).unwrap())
@@ -107,20 +114,13 @@ impl HDWallet {
         let verification_key = child_xpub.public_key();
         let public_key_point: k256::EncodedPoint = verification_key.to_encoded_point(true);
         let public_key_bytes = public_key_point.as_bytes();
-        let re_secp256k1_pubkey =
-            Secp256k1PublicKey::try_from(public_key_bytes).expect("RE secp256k1 pubkey");
-        let address_data = ComponentAddress::virtual_account_from_public_key(&re_secp256k1_pubkey);
-        let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
-        let address = address_encoder
-            .encode(&address_data.to_vec()[..])
-            .expect("bech32 account address");
-
+        let address = address_from_public_key(public_key_bytes);
         let suffix = &address[address.len() - MAX_SUFFIX_LENGTH..];
 
         return ChildKey {
             index,
             key: child_xprv,
-            public_key_bytes: re_secp256k1_pubkey.to_vec().clone(),
+            public_key_bytes: public_key_bytes.to_vec(),
             address: address.clone(),
             suffix: suffix.to_string(),
         };
