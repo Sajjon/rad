@@ -16,7 +16,7 @@ pub fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("benchy", |b| {
         b.iter(|| {
             black_box(par_find(
-                input!("p").unwrap(),
+                input!("x,y,z").unwrap(),
                 RunConfig::new(false, 0, false, false),
             ))
         })

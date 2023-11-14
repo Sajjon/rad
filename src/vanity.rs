@@ -5,7 +5,7 @@ use nu_ansi_term::{
 use base64::{engine::general_purpose, Engine as _};
 use qrencode::{render::unicode, QrCode};
 
-use crate::hdwallet::BASE_PATH;
+use crate::{hdwallet::BASE_PATH, info::INFO_DONATION_ADDR_ONLY, run_config::RunConfig};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Vanity {
@@ -107,4 +107,19 @@ fn color(index: usize, string: String) -> String {
         _ => style.fg(LightPurple).paint(string),
     };
     colored.to_string()
+}
+
+pub fn cond_print(vanity: &Vanity, run_config: &RunConfig) {
+    if run_config.print_found_vanity_result {
+        print_vanity(vanity);
+    }
+}
+pub fn print_vanity(vanity: &Vanity) {
+    println!(
+        "{}\n{}{}\n{}",
+        "🎯".repeat(40),
+        vanity.to_string(),
+        INFO_DONATION_ADDR_ONLY.to_string(),
+        "🎯".repeat(40),
+    );
 }
