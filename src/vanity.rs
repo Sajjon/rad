@@ -5,7 +5,7 @@ use nu_ansi_term::{
 use base64::{engine::general_purpose, Engine as _};
 use qrencode::{render::unicode, QrCode};
 
-use crate::hdwallet::BASE_PATH;
+use crate::{hdwallet::BASE_PATH, info::INFO_DONATION_ADDR_ONLY, run_config::RunConfig};
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Vanity {

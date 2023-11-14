@@ -3,7 +3,7 @@ use crate::params::BruteForceInput;
 use crate::run_config::RunConfig;
 use crate::vanity::*;
 
-use std::collections::BTreeSet;
+use std::collections::HashSet;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
@@ -27,8 +27,7 @@ where
         .map(|i| loop_invariant(i))
         .while_some()
         .map(|i| make_proto(i))
-        .map(|c| eval_proto(c))
-        .flat_map(|xs| xs)
+        .flat_map(|c| eval_proto(c))
         .collect()
 }
 
@@ -51,22 +50,17 @@ fn parallel_search_addresses(
         |c| {
             let suff = c.suffix.clone();
 
-            let mut result: Option<Vanity> = Option::None;
-            let mut trgts = targets.lock().unwrap();
-            for target in trgts.iter() {
+            let mut targets = targets.lock().unwrap();
+            let mut matches = Vec::<Vanity>::new();
+            for target in targets.iter() {
                 if suff.ends_with(target) {
                     let vanity = vanity_from_childkey(&c, target, &wallet);
                     cond_print(&vanity, &run_config);
-                    result = Some(vanity);
-                    break;
-                } else {
-                    continue;
+                    matches.push(vanity);
                 }
             }
-            if let Some(v) = &result {
-                (*trgts).remove(&v.target);
-            }
-            return result;
+            (*targets).retain(|x| matches.iter().all(|v| x != &v.target));
+            return matches;
         },
     )
 }
