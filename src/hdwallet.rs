@@ -88,7 +88,6 @@ impl HDWallet {
 #[derive(Clone)]
 pub struct ChildKey {
     pub index: u32,
-    pub key: XPrv,
     pub public_key_bytes: Vec<u8>,
     pub address: String,
     pub suffix: String,
@@ -104,7 +103,7 @@ fn address_from_public_key(slice: &[u8]) -> String {
 }
 
 impl HDWallet {
-    pub fn derive_child(&self, index: u32) -> ChildKey {
+    fn public_key(&self, index: u32) -> Vec<u8> {
         let child_xprv = self
             .intermediary_key_priv
             .derive_child(ChildNumber::new(index, true).unwrap())
@@ -113,16 +112,19 @@ impl HDWallet {
         let child_xpub = child_xprv.public_key();
         let verification_key = child_xpub.public_key();
         let public_key_point: k256::EncodedPoint = verification_key.to_encoded_point(true);
-        let public_key_bytes = public_key_point.as_bytes();
-        let address = address_from_public_key(public_key_bytes);
-        let suffix = &address[address.len() - MAX_SUFFIX_LENGTH..];
+        public_key_point.as_bytes().to_vec()
+    }
+
+    pub fn derive_child(&self, index: u32) -> ChildKey {
+        let public_key_bytes = self.public_key(index);
+        let address = address_from_public_key(&public_key_bytes);
+        let suffix = address.clone()[address.len() - MAX_SUFFIX_LENGTH..].to_string();
 
         return ChildKey {
             index,
-            key: child_xprv,
-            public_key_bytes: public_key_bytes.to_vec(),
-            address: address.clone(),
-            suffix: suffix.to_string(),
+            public_key_bytes,
+            address,
+            suffix,
         };
     }
 }
