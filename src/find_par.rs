@@ -1,59 +1,45 @@
-use crate::hdwallet::{vanity_from_childkey, ChildKey, HDWallet};
-use crate::info::INFO_DONATION_ADDR_ONLY;
+use crate::hdwallet::{vanity_from_childkey, HDWallet};
 use crate::params::BruteForceInput;
 use crate::run_config::RunConfig;
-use crate::vanity::Vanity;
+use crate::vanity::*;
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 use std::ops::Range;
 use std::sync::{Arc, Mutex};
 
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
-pub fn cond_print(vanity: &Vanity, run_config: &RunConfig) {
-    if run_config.print_found_vanity_result {
-        print_vanity(vanity);
-    }
-}
-pub fn print_vanity(vanity: &Vanity) {
-    println!(
-        "{}\n{}{}\n{}",
-        "🎯".repeat(40),
-        vanity.to_string(),
-        INFO_DONATION_ADDR_ONLY.to_string(),
-        "🎯".repeat(40),
-    );
-}
-
-fn par_do_do_find<E, F>(
+fn parallel_search<Proto, Match, Invariant, MakeProto, EvalProto>(
     range: Range<u32>,
-    wallet: &Box<HDWallet>,
-    check_if_done: E,
-    on_childkey: F,
-) -> Vec<Vanity>
+    loop_invariant: Invariant,
+    make_proto: MakeProto,
+    eval_proto: EvalProto,
+) -> Vec<Match>
 where
-    E: Fn(u32) -> Option<u32> + Send + Sync,
-    F: Fn(ChildKey) -> Option<Vanity> + Send + Sync,
+    Invariant: Fn(u32) -> Option<u32> + Sync,
+    MakeProto: Fn(u32) -> Proto + Sync,
+    EvalProto: Fn(Proto) -> Vec<Match> + Sync,
+    Proto: Send,
+    Match: Send,
 {
     range
         .into_par_iter()
-        .map(|i| check_if_done(i))
+        .map(|i| loop_invariant(i))
         .while_some()
-        .map(|i| wallet.derive_child(i))
-        .map(|c| on_childkey(c))
-        .filter_map(|x| x)
+        .map(|i| make_proto(i))
+        .map(|c| eval_proto(c))
+        .flat_map(|xs| xs)
         .collect()
 }
 
-fn par_do_find(
+fn parallel_search_addresses(
     run_config: RunConfig,
     wallet: Box<HDWallet>,
     end_index: u32,
     targets: Arc<Mutex<HashSet<String>>>,
 ) -> Vec<Vanity> {
-    par_do_do_find(
+    parallel_search(
         0..end_index,
-        &wallet,
         |i| {
             if targets.lock().unwrap().is_empty() {
                 None
@@ -61,6 +47,7 @@ fn par_do_find(
                 Some(i)
             }
         },
+        |i| wallet.derive_child(i),
         |c| {
             let suff = c.suffix.clone();
 
@@ -84,25 +71,16 @@ fn par_do_find(
     )
 }
 
-fn _par_find(
-    run_config: RunConfig,
-    wallet: Box<HDWallet>,
-    end_index: u32,
-    targets_: HashSet<String>,
-) -> Vec<Vanity> {
-    let targets = Arc::new(Mutex::new(targets_.clone()));
-    par_do_find(run_config.clone(), wallet, end_index, targets)
-}
-
 pub fn par_find(input: BruteForceInput, run_config: RunConfig) -> Vec<Vanity> {
     if run_config.print_input {
         println!("{}", input);
     }
-    let wallet = HDWallet::from_entropy(input.int()).unwrap();
-    _par_find(
-        run_config,
+    let wallet = HDWallet::from_entropy(input.clone().int()).unwrap();
+    let targets = Arc::new(Mutex::new(input.clone().targets));
+    parallel_search_addresses(
+        run_config.clone(),
         Box::new(wallet),
         input.index_end(),
-        input.targets,
+        targets,
     )
 }

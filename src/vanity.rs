@@ -108,3 +108,18 @@ fn color(index: usize, string: String) -> String {
     };
     colored.to_string()
 }
+
+pub fn cond_print(vanity: &Vanity, run_config: &RunConfig) {
+    if run_config.print_found_vanity_result {
+        print_vanity(vanity);
+    }
+}
+pub fn print_vanity(vanity: &Vanity) {
+    println!(
+        "{}\n{}{}\n{}",
+        "🎯".repeat(40),
+        vanity.to_string(),
+        INFO_DONATION_ADDR_ONLY.to_string(),
+        "🎯".repeat(40),
+    );
+}
