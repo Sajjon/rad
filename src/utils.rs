@@ -1,8 +1,6 @@
-use std::{collections::HashSet, sync::MutexGuard};
-
-// bip39 crate (since it support 12 word mnemonics)
 use bip39::Mnemonic;
 use primitive_types::U256;
+use std::{collections::HashSet, sync::MutexGuard};
 
 use crate::params::Bip39WordCount;
 

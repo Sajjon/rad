@@ -5,7 +5,7 @@ const DONATION_ADDRESS: &str = "account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vv
 
 pub fn generate_donate_qr() -> String {
     let code = QrCode::new(DONATION_ADDRESS).unwrap();
-    return code.render::<unicode::Dense1x2>().build();
+    code.render::<unicode::Dense1x2>().build()
 }
 
 const CONSIDER_DONATE_MESSAGE: &str =
