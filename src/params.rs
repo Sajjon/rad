@@ -83,7 +83,8 @@ impl BruteForceInput {
 
 impl std::fmt::Display for BruteForceInput {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let targets_string = itertools::join(&self.targets, ",");
+        let target_strings: Vec<String> = self.targets.clone().into_iter().collect();
+        let targets_string = target_strings.join(",");
         let multi_matches = self.find_multiple_accounts_per_target;
         let matches_str = if multi_matches {
             "👨‍👧‍👧 Multiple accounts per target"

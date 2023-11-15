@@ -59,12 +59,12 @@ fn main() {
     .expect("Valid input");
 
     let run_config = RunConfig::new(true, 0, true, true);
-    println!("{}", INFO_WITH_DONATION_QR);
+    println!("{INFO_WITH_DONATION_QR}");
     let now = SystemTime::now();
     let vec = par_find(input, run_config);
     let time_elapsed = now.elapsed().unwrap();
     println!(
-        "✅ Exiting program, ran for '{}' ms, found #{} results",
+        "\n✅ Exiting program, ran for '{}' ms, found #{} results",
         time_elapsed.as_millis(),
         vec.len()
     );
