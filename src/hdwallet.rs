@@ -3,8 +3,9 @@ use crate::run_error::RunError;
 use crate::utils::mnemonic_from_u256;
 use crate::vanity::Vanity;
 use base64::{engine::general_purpose, Engine as _};
-use bip32::{ChildNumber, Seed, XPrv};
 use bip39::Mnemonic;
+use hdwallet::secp256k1::Secp256k1;
+use hdwallet::{ChainPath, DefaultKeyChain, ExtendedPrivKey, KeyChain};
 use primitive_types::U256;
 use radix_engine_common::prelude::{
     AddressBech32Encoder, ComponentAddress, NetworkDefinition, Secp256k1PublicKey,
@@ -13,39 +14,36 @@ use radix_engine_common::prelude::{
 pub struct HDWallet {
     pub entropy: U256,
     pub mnemonic: Mnemonic,
-    pub intermediary_key_priv: XPrv,
-    pub seed: Seed,
+    pub intermediary_key_priv_hdwallet: ExtendedPrivKey,
+    pub key_chain: DefaultKeyChain,
     pub mnemonic_phrase: String,
+    pub finger_print: String,
 }
 
 pub const BASE_PATH: &str = "m/44'/1022'/0'/0";
 
 impl HDWallet {
-    pub fn fingerprint(&self) -> String {
-        general_purpose::STANDARD_NO_PAD.encode(&self.seed.as_bytes()[56..])
-    }
-
     fn new(entropy: U256, mnemonic: Mnemonic) -> Result<Self, RunError> {
-        let seed = Seed::new(mnemonic.to_seed("")); // bip32 create
+        let seed_bytes = mnemonic.to_seed("");
+        let seed_fingerprint = general_purpose::STANDARD_NO_PAD.encode(&seed_bytes[56..]);
+        let key_chain =
+            DefaultKeyChain::new(ExtendedPrivKey::with_seed(&seed_bytes).expect("master key"));
 
-        let intermediary_path = BASE_PATH
-            .parse()
-            .map_err(|_| RunError::ParseDerivationPath)?;
-
-        let key = XPrv::derive_from_path(&seed, &intermediary_path)
-            .map_err(|_| RunError::DeriveChildKeyFromPath)?;
+        let (intermediary_key_priv_hdwallet, _) = key_chain
+            .derive_private_key(ChainPath::from(BASE_PATH))
+            .expect("fetch key");
 
         Ok(Self {
             entropy,
             mnemonic: mnemonic.clone(),
-            seed,
-            intermediary_key_priv: key,
+            key_chain,
+            intermediary_key_priv_hdwallet,
             mnemonic_phrase: mnemonic.to_string(),
+            finger_print: seed_fingerprint,
         })
     }
 
     pub fn from_mnemonic_phrase(mnemonic_phrase: &str) -> Result<Self, RunError> {
-        // let mnemonic = Mnemonic::from(mnemonic_phrase);
         let mnemonic =
             Mnemonic::parse(mnemonic_phrase).map_err(|_| RunError::MnemonicFromPhrase)?;
         let entropy_bytes = mnemonic.to_entropy();
@@ -78,15 +76,13 @@ fn address_from_public_key(slice: &[u8]) -> String {
 
 impl HDWallet {
     fn public_key(&self, index: u32) -> Vec<u8> {
-        let child_xprv = self
-            .intermediary_key_priv
-            .derive_child(ChildNumber::new(index, true).unwrap())
+        let s = Secp256k1::new();
+        let key = self
+            .intermediary_key_priv_hdwallet
+            .derive_private_key(hdwallet::KeyIndex::hardened_from_normalize_index(index).unwrap())
             .unwrap();
-
-        let child_xpub = child_xprv.public_key();
-        let verification_key = child_xpub.public_key();
-        let public_key_point: k256::EncodedPoint = verification_key.to_encoded_point(true);
-        public_key_point.as_bytes().to_vec()
+        let pubkey = key.private_key.public_key(&s);
+        return pubkey.serialize().to_vec();
     }
 
     pub fn derive_child(&self, index: u32) -> ChildKey {
@@ -111,6 +107,6 @@ pub fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWalle
         index: child_key.index,
         public_key_bytes: child_key.public_key_bytes.clone(),
         mnemonic: wallet.mnemonic_phrase.clone(),
-        bip39_seed_fingerprint: wallet.fingerprint(),
+        bip39_seed_fingerprint: wallet.finger_print.clone(),
     }
 }
