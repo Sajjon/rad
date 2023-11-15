@@ -8,7 +8,6 @@ edition = "2021"
 [dependencies]
 rand = "0.7.3"
 bip32 = "0.5.1"
-k256 = "0.13.1"
 radix-engine-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.0.1" }
 scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.0.1" }
 bip39 = "2.0.0"
@@ -24,8 +23,6 @@ unindent = "0.2.3"
 const_format = "0.2.32"
 primitive-types = "0.12.2"
 default-args = "1.0.0"
-async-std = { version = "1.12.0", features = ["attributes"] }
-futures = "0.3.29"
 num-iter = "0.1.43"
 rayon = "1.8.0"
 hdwallet = "0.4.1"
