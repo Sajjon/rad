@@ -129,7 +129,6 @@ mod tests {
 
     #[test]
     fn find_vanity_suffix_xx_yy() {
-        let run_config = RunConfig::new(false, 0, false, false);
         let vec = par_find(
             input!("xx,yy").unwrap(),
             RunConfig::new(false, 0, false, false),

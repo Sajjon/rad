@@ -52,7 +52,7 @@ impl Vanity {
         let value = [is_software_account_marker, &pubkey, &index_str, &name_value]
             .join(&Vanity::separator_intra());
         let separator_account_name_end = "}";
-        return format!("{}{}", value, separator_account_name_end);
+        format!("{}{}", value, separator_account_name_end)
     }
 
     pub fn cap33_export_string(&self) -> String {
@@ -64,26 +64,26 @@ impl Vanity {
             .map(|u| u.to_string())
             .join(&Vanity::separator_intra());
         let account = self.cap33_export_string_account_part();
-        return format!("{}{}{}", header, separator_header_end, account);
+        format!("{}{}{}", header, separator_header_end, account)
     }
 
     pub fn cap33_qr_code_string(&self) -> String {
         // Encode some data into bits.
         let code = QrCode::new(self.cap33_export_string().clone()).unwrap();
 
-        return code.render::<unicode::Dense1x2>().quiet_zone(true).build();
+        code.render::<unicode::Dense1x2>().quiet_zone(true).build()
     }
 
     pub fn mnemonic_phrase_grid_string(&self) -> String {
         let words = self
             .mnemonic
             .split(' ')
-            .map(|w| String::from(format!("{:<8}", w))) // 8 is max length of English BIP39 word
+            .map(|w| format!("{:<8}", w)) // 8 is max length of English BIP39 word
             .collect::<Vec<String>>();
         let string: String = words.chunks(3).enumerate().fold(String::new(), |s, l| {
             s + color(l.0, Vec::from(l.1).join("\t\t")).as_str() + "\n"
         });
-        return string;
+        string
     }
 }
 
@@ -118,8 +118,8 @@ pub fn print_vanity(vanity: &Vanity) {
     println!(
         "{}\n{}{}\n{}",
         "🎯".repeat(40),
-        vanity.to_string(),
-        INFO_DONATION_ADDR_ONLY.to_string(),
+        vanity,
+        INFO_DONATION_ADDR_ONLY,
         "🎯".repeat(40),
     );
 }

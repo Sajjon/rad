@@ -48,13 +48,13 @@ impl HDWallet {
         let mnemonic =
             Mnemonic::parse(mnemonic_phrase).map_err(|_| RunError::MnemonicFromPhrase)?;
         let entropy_bytes = mnemonic.to_entropy();
-        let entropy = U256::from_big_endian(&entropy_bytes.as_slice());
-        return Self::new(entropy, mnemonic);
+        let entropy = U256::from_big_endian(entropy_bytes.as_slice());
+        Self::new(entropy, mnemonic)
     }
 
     pub fn from_entropy(entropy: U256) -> Result<Self, RunError> {
         let mnemonic = mnemonic_from_u256(&entropy, &Bip39WordCount::Twelve);
-        return Self::new(entropy, mnemonic);
+        Self::new(entropy, mnemonic)
     }
 }
 
@@ -83,7 +83,7 @@ impl HDWallet {
             .derive_private_key(hdwallet::KeyIndex::hardened_from_normalize_index(index).unwrap())
             .unwrap();
         let pubkey = key.private_key.public_key(&s);
-        return pubkey.serialize().to_vec();
+        pubkey.serialize().to_vec()
     }
 
     pub fn derive_child(&self, index: u32) -> ChildKey {
@@ -91,12 +91,12 @@ impl HDWallet {
         let address = address_from_public_key(&public_key_bytes);
         let suffix = address.clone()[address.len() - MAX_SUFFIX_LENGTH..].to_string();
 
-        return ChildKey {
+        ChildKey {
             index,
             public_key_bytes,
             address,
             suffix,
-        };
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 use std::fs;
 
-fn words_by_line<'a>(s: String) -> Vec<String> {
+fn words_by_line(s: String) -> Vec<String> {
     s.lines()
         .map(|line| line.split_whitespace().collect())
         .collect()

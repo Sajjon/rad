@@ -63,7 +63,7 @@ where
                 }
             }
             remove(&matches, targets, |v, t| &v.target != t);
-            return matches;
+            matches
         },
     )
 }
