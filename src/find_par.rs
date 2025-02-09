@@ -1,19 +1,23 @@
-use crate::hdwallet::{vanity_from_childkey, ChildKey, HDWallet};
-use crate::params::BruteForceInput;
-use crate::run_config::RunConfig;
-use crate::utils::remove;
-use crate::vanity::*;
+use crate::{
+    hdwallet::{vanity_from_childkey, ChildKey, HDWallet},
+    params::BruteForceInput,
+    run_config::RunConfig,
+    utils::remove,
+    vanity::*,
+};
 
-use std::collections::HashSet;
-use std::ops::Range;
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashSet,
+    ops::Range,
+    sync::{Arc, Mutex},
+};
 
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 /// In parallel searches for needles in a haystack, until haystack is empty
-/// 
+///
 /// When all needles have been found, `take_while` returns false, thus stopping iteration.
-/// 
+///
 /// Needles are created from "needle tips", potential candidates for a needle, and needle
 /// tips are created for every iteration from a `u32`.
 fn parallel_search<NeedleTip, Needle, TakeWhile, NeedleTipFrom, NeedlesFromTip>(

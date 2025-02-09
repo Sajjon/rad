@@ -1,16 +1,18 @@
-use crate::params::{Bip39WordCount, MAX_SUFFIX_LENGTH};
-use crate::run_error::RunError;
-use crate::utils::mnemonic_from_u256;
-use crate::vanity::Vanity;
-use base64::engine::general_purpose;
-use base64::Engine;
+use crate::{
+    params::{Bip39WordCount, MAX_SUFFIX_LENGTH},
+    run_error::RunError,
+    utils::mnemonic_from_u256,
+    vanity::Vanity,
+};
+use base64::{engine::general_purpose, Engine};
 use bip39::Mnemonic;
-use hdwallet::secp256k1::Secp256k1;
-use hdwallet::{ChainPath, DefaultKeyChain, ExtendedPrivKey, KeyChain};
+use hdwallet::{secp256k1::Secp256k1, ChainPath, DefaultKeyChain, ExtendedPrivKey, KeyChain};
 use primitive_types::U256;
 use radix_common::prelude::{
     AddressBech32Encoder, ComponentAddress, NetworkDefinition, Secp256k1PublicKey,
 };
+
+pub const BASE_PATH: &str = "m/44'/1022'/0'/0";
 
 pub struct HDWallet {
     pub entropy: U256,
@@ -20,8 +22,6 @@ pub struct HDWallet {
     pub mnemonic_phrase: String,
     pub finger_print: String,
 }
-
-pub const BASE_PATH: &str = "m/44'/1022'/0'/0";
 
 impl HDWallet {
     fn new(entropy: U256, mnemonic: Mnemonic) -> Result<Self, RunError> {
@@ -58,22 +58,6 @@ impl HDWallet {
     }
 }
 
-#[derive(Clone)]
-pub struct ChildKey {
-    pub index: u32,
-    pub public_key_bytes: Vec<u8>,
-    pub address: String,
-    pub suffix: String,
-}
-
-fn address_from_public_key(slice: &[u8]) -> String {
-    let re_secp256k1_pubkey = Secp256k1PublicKey::try_from(slice).expect("RE secp256k1 pubkey");
-    let address_data = ComponentAddress::preallocated_account_from_public_key(&re_secp256k1_pubkey);
-    let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
-    address_encoder
-        .encode(&address_data.to_vec()[..])
-        .expect("bech32 account address")
-}
 
 impl HDWallet {
     fn public_key(&self, index: u32) -> Vec<u8> {
@@ -98,6 +82,24 @@ impl HDWallet {
             suffix,
         }
     }
+}
+
+
+#[derive(Clone)]
+pub struct ChildKey {
+    pub index: u32,
+    pub public_key_bytes: Vec<u8>,
+    pub address: String,
+    pub suffix: String,
+}
+
+fn address_from_public_key(slice: &[u8]) -> String {
+    let re_secp256k1_pubkey = Secp256k1PublicKey::try_from(slice).expect("RE secp256k1 pubkey");
+    let address_data = ComponentAddress::preallocated_account_from_public_key(&re_secp256k1_pubkey);
+    let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
+    address_encoder
+        .encode(&address_data.to_vec()[..])
+        .expect("bech32 account address")
 }
 
 pub fn vanity_from_childkey(child_key: &ChildKey, target: &str, wallet: &HDWallet) -> Vanity {
