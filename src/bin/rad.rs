@@ -32,11 +32,11 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum TargetSuffixes {
-    /// Read target suffixes from file, one target per line (without any delimitor).
+    /// Read target suffixes from file, one target per line (without any delimiter).
     #[command(short_flag = 'f', arg_required_else_help = true)]
     File { file_path: String },
 
-    /// A comma seperated string of targets, e.g. "hey,me,yay"
+    /// A comma separated string of targets, e.g. "hey,me,yay"
     #[command(short_flag = 't', arg_required_else_help = true)]
     Targets { csv: String },
 }

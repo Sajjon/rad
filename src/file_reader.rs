@@ -8,6 +8,6 @@ fn words_by_line<'a>(s: String) -> Vec<String> {
 
 pub fn suffixes_from_file(file_path: String) -> String {
     let content =
-        fs::read_to_string(file_path).expect("One suffix per line, without any delimitors.");
+        fs::read_to_string(file_path).expect("One suffix per line, without any delimiters.");
     words_by_line(content).join(",")
 }
