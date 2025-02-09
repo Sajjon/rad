@@ -119,12 +119,12 @@ fn invalid_bech32_char(c: &char) -> bool {
     BECH32_ALPHABET.contains(*c)
 }
 
-pub fn validating_split(comma_seperated: &str) -> Result<HashSet<String>, TargetSuffixError> {
-    if comma_seperated.len() == 0 {
+pub fn validating_split(comma_separated: &str) -> Result<HashSet<String>, TargetSuffixError> {
+    if comma_separated.is_empty() {
         return Err(TargetSuffixError::TargetsStringMustNotBeEmpty);
     }
 
-    let targets: Vec<String> = comma_seperated
+    let targets: Vec<String> = comma_separated
         .split(",")
         .map(str::trim)
         .map(str::to_string)
@@ -133,7 +133,7 @@ pub fn validating_split(comma_seperated: &str) -> Result<HashSet<String>, Target
     let mut set: HashSet<String> = HashSet::new();
 
     for target in &targets {
-        if target.len() == 0 {
+        if target.is_empty() {
             return Err(TargetSuffixError::TargetSuffixMustNotBeEmpty);
         }
 
@@ -158,7 +158,7 @@ pub fn validating_split(comma_seperated: &str) -> Result<HashSet<String>, Target
         }
     }
 
-    return Ok(set);
+    Ok(set)
 }
 
 impl BruteForceInput {

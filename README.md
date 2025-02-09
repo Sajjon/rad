@@ -69,4 +69,4 @@ account_rdx16xlfcpp0vf7e3gqnswv8j9k58n6rjccu58vvspmdva22kf3aplease
 <img src="./.github/please_donate.jpeg" width="256" height="256">
 
 # License
-This software uses [Radix Engine Toolkit](https://github.com/radixdlt/radix-engine-toolkit) which is released under [Apache 2.0 License](https://github.com/radixdlt/radix-engine-toolkit/blob/main/LICENSE), this software uses the same licese.
+This software uses [Radix Engine Toolkit](https://github.com/radixdlt/radix-engine-toolkit) which is released under [Apache 2.0 License](https://github.com/radixdlt/radix-engine-toolkit/blob/main/LICENSE), this software uses the same license.

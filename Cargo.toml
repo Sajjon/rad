@@ -6,25 +6,27 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rand = "0.7.3"
-radix-engine-common = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.0.1" }
-scrypto = { git = "https://github.com/radixdlt/radixdlt-scrypto", version = "1.0.1" }
-bip39 = "2.0.0"
-thiserror = "1.0.50"
-qrencode = "0.14.0"
+ansi-escapes = "0.1.1"
+anstream = "0.6.8"
 base64 = "0.21.5"
+bip39 = "2.0.0"
+clap = { version = "4.5.28", features = ["derive"] }
+const_format = "0.2.32"
+default-args = "1.0.0"
+hdwallet = "0.4.1"
 hex = "0.4.3"
 nu-ansi-term = "0.49.0"
-clap = { version = "4.4.7", features = ["derive"] }
-ansi-escapes = "0.1.1"
-unindent = "0.2.3"
-const_format = "0.2.32"
 primitive-types = "0.12.2"
-default-args = "1.0.0"
+qrencode = "0.14.0"
+radix-common = "1.3.0"
+rand = "0.7.3"
 rayon = "1.8.0"
-hdwallet = "0.4.1"
+scrypto = "1.3.0"
+thiserror = "1.0.50"
+unindent = "0.2.3"
 
 [dev-dependencies]
+anstream = "0.6.8"
 criterion = "0.5.1"
 
 [[bin]]
@@ -39,7 +41,6 @@ harness = false
 opt-level = 3
 debug = true
 debug-assertions = false
-panic = "abort"
 overflow-checks = false
 lto = false
 incremental = false
