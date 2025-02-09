@@ -8,7 +8,7 @@ use bip39::Mnemonic;
 use hdwallet::secp256k1::Secp256k1;
 use hdwallet::{ChainPath, DefaultKeyChain, ExtendedPrivKey, KeyChain};
 use primitive_types::U256;
-use radix_engine_common::prelude::{
+use radix_common::prelude::{
     AddressBech32Encoder, ComponentAddress, NetworkDefinition, Secp256k1PublicKey,
 };
 
@@ -68,7 +68,7 @@ pub struct ChildKey {
 
 fn address_from_public_key(slice: &[u8]) -> String {
     let re_secp256k1_pubkey = Secp256k1PublicKey::try_from(slice).expect("RE secp256k1 pubkey");
-    let address_data = ComponentAddress::virtual_account_from_public_key(&re_secp256k1_pubkey);
+    let address_data = ComponentAddress::preallocated_account_from_public_key(&re_secp256k1_pubkey);
     let address_encoder = AddressBech32Encoder::new(&NetworkDefinition::mainnet());
     address_encoder
         .encode(&address_data.to_vec()[..])
