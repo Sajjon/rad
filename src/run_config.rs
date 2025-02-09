@@ -27,3 +27,9 @@ impl RunConfig {
         }
     }
 }
+
+impl Default for RunConfig {
+    fn default() -> Self {
+        Self::new(true, 0, true, true)
+    }
+}

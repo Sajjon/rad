@@ -11,6 +11,7 @@ use crate::{hdwallet::BASE_PATH, info::INFO_DONATION_ADDR_ONLY, run_config::RunC
 pub struct Vanity {
     pub target: String,
     pub address: String,
+
     /// Last 6 chars of the address, stored property for higher performance, used to check match against `target`.
     pub address_suffix: String,
     pub index: u32,
@@ -27,12 +28,15 @@ impl Vanity {
     pub fn derivation_path(&self) -> String {
         format!("{}/{}'", BASE_PATH, self.index)
     }
+
     pub fn public_key_hex(&self) -> String {
         hex::encode(&self.public_key_bytes)
     }
+
     pub fn public_key_base64(&self) -> String {
         general_purpose::STANDARD_NO_PAD.encode(&self.public_key_bytes)
     }
+
     pub fn separator_intra() -> String {
         String::from("^")
     }
@@ -114,6 +118,7 @@ pub fn cond_print(vanity: &Vanity, run_config: &RunConfig) {
         print_vanity(vanity);
     }
 }
+
 pub fn print_vanity(vanity: &Vanity) {
     println!(
         "{}\n{}{}\n{}",

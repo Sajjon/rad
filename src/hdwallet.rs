@@ -116,7 +116,10 @@ mod tests {
     #[test]
     fn entropy() {
         let wallet = HDWallet::from_entropy(U256::MAX);
-        assert_eq!(wallet.unwrap().mnemonic_phrase, "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong");
+        assert_eq!(
+            wallet.unwrap().mnemonic_phrase,
+            "zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong"
+        );
     }
 
     #[test]
